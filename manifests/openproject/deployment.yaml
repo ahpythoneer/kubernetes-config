@@ -43,7 +43,7 @@ spec:
     spec:
       containers:
       - name: openproject
-        image: openproject/community:latest
+        image: openproject/openproject:latest
         ports:
         - containerPort: 8080
         env:
