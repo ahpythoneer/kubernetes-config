@@ -30,7 +30,7 @@ spec:
   loadBalancerIP: 10.0.0.157
   ports:
   - port: 80
-    targetPort: 8443
+    targetPort: 8080
     name: http
   selector:
     app: code-server
