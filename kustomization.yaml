@@ -13,10 +13,9 @@ resources:
   - manifests/vaultwarden/deployment.yaml
   - manifests/code-server/namespace.yaml
   - manifests/code-server/deployment.yaml
-  #- manifests/openproject/namespace.yaml
-  #- manifests/openproject/deployment.yaml
+  - manifests/gitea/deployment.yaml
+  - manifests/grafana/namespace.yaml
+  - manifests/grafana/deployment.yaml
   - manifests/prometheus/namespace.yaml
   - manifests/prometheus/configmap.yaml
   - manifests/prometheus/deployment.yaml
-  - manifests/grafana/namespace.yaml
-  - manifests/grafana/deployment.yaml
