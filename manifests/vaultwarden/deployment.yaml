@@ -46,10 +46,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - vaultwarden.racktocloud.com
+    - k8vault.racktocloud.com
     secretName: vaultwarden-tls
   rules:
-  - host: vaultwarden.racktocloud.com
+  - host: k8vault.racktocloud.com
     http:
       paths:
       - path: /
