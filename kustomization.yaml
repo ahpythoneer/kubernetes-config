@@ -7,3 +7,16 @@ commonLabels:
 resources:
   - manifests/monitoring/namespace.yaml
   - manifests/monitoring/configmap.yaml
+  - manifests/heimdall/namespace.yaml
+  - manifests/heimdall/deployment.yaml
+  - manifests/vaultwarden/namespace.yaml
+  - manifests/vaultwarden/deployment.yaml
+  - manifests/code-server/namespace.yaml
+  - manifests/code-server/deployment.yaml
+  - manifests/openproject/namespace.yaml
+  - manifests/openproject/deployment.yaml
+  - manifests/prometheus/namespace.yaml
+  - manifests/prometheus/configmap.yaml
+  - manifests/prometheus/deployment.yaml
+  - manifests/grafana/namespace.yaml
+  - manifests/grafana/deployment.yaml
