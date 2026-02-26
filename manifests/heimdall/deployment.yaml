@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: heimdall-storage
+  namespace: heimdall
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-storage
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: heimdall
+  namespace: heimdall
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.0.0.155
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  - port: 443
+    targetPort: 443
+    name: https
+  selector:
+    app: heimdall
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heimdall
+  namespace: heimdall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: heimdall
+  template:
+    metadata:
+      labels:
+        app: heimdall
+    spec:
+      containers:
+      - name: heimdall
+        image: linuxserver/heimdall:latest
+        ports:
+        - containerPort: 80
+        - containerPort: 443
+        env:
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: TZ
+          value: "UTC"
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: heimdall-storage

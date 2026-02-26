@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openproject-storage
+  namespace: openproject
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-storage
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openproject
+  namespace: openproject
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.0.0.158
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: http
+  selector:
+    app: openproject
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openproject
+  namespace: openproject
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openproject
+  template:
+    metadata:
+      labels:
+        app: openproject
+    spec:
+      containers:
+      - name: openproject
+        image: openproject/community:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: OPENPROJECT_HOST__NAME
+          value: "openproject.internal.racktocloud.com"
+        - name: OPENPROJECT_HTTPS
+          value: "false"
+        volumeMounts:
+        - name: openproject-data
+          mountPath: /var/openproject/assets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+      volumes:
+      - name: openproject-data
+        persistentVolumeClaim:
+          claimName: openproject-storage
