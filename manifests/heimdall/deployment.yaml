@@ -46,6 +46,8 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
+        runAsUser: 911
+        runAsGroup: 911
       containers:
       - name: heimdall
         image: linuxserver/heimdall:latest
@@ -54,9 +56,9 @@ spec:
         - containerPort: 443
         env:
         - name: PUID
-          value: "1000"
+          value: "911"
         - name: PGID
-          value: "1000"
+          value: "911"
         - name: TZ
           value: "UTC"
         volumeMounts:

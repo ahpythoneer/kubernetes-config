@@ -26,14 +26,39 @@ metadata:
   name: vaultwarden
   namespace: vaultwarden
 spec:
-  type: LoadBalancer
-  loadBalancerIP: 10.0.0.156
+  type: ClusterIP
   ports:
   - port: 80
     targetPort: 80
     name: http
   selector:
     app: vaultwarden
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vaultwarden-ingress
+  namespace: vaultwarden
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "512m"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - vaultwarden.racktocloud.com
+    secretName: vaultwarden-tls
+  rules:
+  - host: vaultwarden.racktocloud.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: vaultwarden
+            port:
+              number: 80
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -57,7 +82,7 @@ spec:
         - containerPort: 80
         env:
         - name: DOMAIN
-          value: "http://10.0.0.156"
+          value: "https://k8vault.racktocloud.com"
         - name: SIGNUPS_ALLOWED
           value: "false"
         - name: ADMIN_TOKEN
@@ -67,12 +92,6 @@ spec:
               key: admin-token
         - name: LOG_LEVEL
           value: "info"
-        - name: SKIP_HTTPS
-          value: "true"
-        - name: DISABLE_ICON_DOWNLOAD
-          value: "true"
-        - name: INVITATIONS_ORG_INVITE_EXPIRATION_HOURS
-          value: "24"
         volumeMounts:
         - name: vaultwarden-data
           mountPath: /data
