@@ -44,6 +44,8 @@ spec:
       labels:
         app: heimdall
     spec:
+      securityContext:
+        fsGroup: 1000
       containers:
       - name: heimdall
         image: linuxserver/heimdall:latest
