@@ -57,7 +57,7 @@ spec:
         - containerPort: 80
         env:
         - name: DOMAIN
-          value: "https://vaultwarden.internal.racktocloud.com"
+          value: "http://10.0.0.156"
         - name: SIGNUPS_ALLOWED
           value: "false"
         - name: ADMIN_TOKEN
@@ -67,6 +67,10 @@ spec:
               key: admin-token
         - name: LOG_LEVEL
           value: "info"
+        - name: DISABLE_ICON_DOWNLOAD
+          value: "true"
+        - name: INVITATIONS_ORG_INVITE_EXPIRATION_HOURS
+          value: "24"
         volumeMounts:
         - name: vaultwarden-data
           mountPath: /data
