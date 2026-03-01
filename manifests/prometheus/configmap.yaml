@@ -37,7 +37,7 @@ data:
       - source_labels: [__address__]
         target_label: __param_target
       - target_label: __address__
-        replacement: 'localhost:9100'
+        replacement: '10.0.0.100:9100,10.0.0.101:9100,10.0.0.102:9100,10.0.0.103:9100'
     
     - job_name: 'kubernetes-pods'
       kubernetes_sd_configs:
