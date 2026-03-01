@@ -18,6 +18,4 @@ resources:
   - manifests/prometheus/namespace.yaml
   - manifests/prometheus/configmap.yaml
   - manifests/prometheus/deployment.yaml
-  - manifests/harbor/namespace.yaml
-  - manifests/harbor/deployment.yaml
   - manifests/gitea/deployment.yaml
