@@ -8,46 +8,45 @@ data:
     global:
       scrape_interval: 30s
       evaluation_interval: 30s
-      external_labels:
-        cluster: 'home-lab'
-        environment: 'production'
-    
-    # Alerting configuration (optional)
-    alerting:
-      alertmanagers:
-      - static_configs:
-        - targets: []
-    
-    rule_files:
-      - /etc/prometheus/rules/*.yml
     
     scrape_configs:
     
-    # ============================================
-    # PROMETHEUS ITSELF
-    # ============================================
+    # Prometheus itself
     - job_name: 'prometheus'
       static_configs:
       - targets: ['localhost:9090']
-        labels:
-          instance: 'prometheus-main'
     
-    # ============================================
-    # KUBERNETES CLUSTER COMPONENTS
-    # ============================================
-    - job_name: 'kubernetes-apiserver'
-      kubernetes_sd_configs:
-      - role: endpoints
-      scheme: https
-      tls_config:
-        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-      relabel_configs:
-      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
-        action: keep
-        regex: default;kubernetes;https
+    # Node Exporter (all 4 nodes)
+    - job_name: 'node-exporter'
+      static_configs:
+      - targets:
+        - '10.0.0.100:9100'
+        - '10.0.0.101:9100'
+        - '10.0.0.103:9100'
+        - '10.0.0.104:9100'
     
-    # Kubelet metrics
+    # Grafana
+    - job_name: 'grafana'
+      static_configs:
+      - targets: ['grafana.grafana.svc.cluster.local:3000']
+      metrics_path: '/metrics'
+    
+    # ArgoCD Server
+    - job_name: 'argocd-server'
+      static_configs:
+      - targets: ['argocd-server.argocd.svc.cluster.local:8083']
+    
+    # ArgoCD Controller
+    - job_name: 'argocd-controller'
+      static_configs:
+      - targets: ['argocd-application-controller.argocd.svc.cluster.local:8085']
+    
+    # ArgoCD Repo Server
+    - job_name: 'argocd-repo-server'
+      static_configs:
+      - targets: ['argocd-repo-server.argocd.svc.cluster.local:8084']
+    
+    # Kubernetes Nodes
     - job_name: 'kubernetes-nodes'
       kubernetes_sd_configs:
       - role: node
@@ -58,181 +57,3 @@ data:
       relabel_configs:
       - action: labelmap
         regex: __meta_kubernetes_node_label_(.+)
-      - target_label: __address__
-        replacement: kubernetes.default.svc:443
-      - source_labels: [__meta_kubernetes_node_name]
-        regex: (.+)
-        target_label: __metrics_path__
-        replacement: /api/v1/nodes/${1}/proxy/metrics
-    
-    # cAdvisor (Container metrics)
-    - job_name: 'kubernetes-nodes-cadvisor'
-      kubernetes_sd_configs:
-      - role: node
-      scheme: https
-      tls_config:
-        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-      relabel_configs:
-      - action: labelmap
-        regex: __meta_kubernetes_node_label_(.+)
-      - target_label: __address__
-        replacement: kubernetes.default.svc:443
-      - source_labels: [__meta_kubernetes_node_name]
-        regex: (.+)
-        target_label: __metrics_path__
-        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
-    
-    # Service endpoints (generic pod monitoring)
-    - job_name: 'kubernetes-service-endpoints'
-      kubernetes_sd_configs:
-      - role: service
-      metrics_path: /probe
-      params:
-        module: [http_2xx]
-      relabel_configs:
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_probe]
-        action: keep
-        regex: true
-      - source_labels: [__address__]
-        target_label: __param_target
-      - target_label: __address__
-        replacement: blackbox-exporter:9115
-      - source_labels: [__param_target]
-        target_label: instance
-      - action: labelmap
-        regex: __meta_kubernetes_service_label_(.+)
-      - source_labels: [__meta_kubernetes_namespace]
-        target_label: kubernetes_namespace
-      - source_labels: [__meta_kubernetes_service_name]
-        target_label: kubernetes_name
-    
-    # ============================================
-    # INFRASTRUCTURE MONITORING
-    # ============================================
-    
-    # Node Exporter (if using DaemonSet)
-    - job_name: 'node-exporter'
-      kubernetes_sd_configs:
-      - role: endpoints
-      relabel_configs:
-      - source_labels: [__meta_kubernetes_endpoints_name]
-        regex: 'node-exporter'
-        action: keep
-      - action: labelmap
-        regex: __meta_kubernetes_pod_label_(.+)
-      - source_labels: [__meta_kubernetes_namespace]
-        action: replace
-        target_label: kubernetes_namespace
-      - source_labels: [__meta_kubernetes_pod_name]
-        action: replace
-        target_label: kubernetes_pod_name
-    
-    # Alternative: Direct node-exporter via static config (recommended)
-    - job_name: 'node-exporter-static'
-      static_configs:
-      - targets:
-        - '10.0.0.100:9100'
-        - '10.0.0.101:9100'
-        - '10.0.0.102:9100'
-        - '10.0.0.103:9100'
-        labels:
-          environment: 'production'
-    
-    # ============================================
-    # ARGOCD MONITORING
-    # ============================================
-    - job_name: 'argocd-server'
-      static_configs:
-      - targets: ['argocd-server.argocd.svc.cluster.local:8083']
-        labels:
-          instance: 'argocd-server'
-          component: 'argocd'
-    
-    - job_name: 'argocd-controller'
-      static_configs:
-      - targets: ['argocd-application-controller.argocd.svc.cluster.local:8085']
-        labels:
-          instance: 'argocd-controller'
-          component: 'argocd'
-    
-    - job_name: 'argocd-repo-server'
-      static_configs:
-      - targets: ['argocd-repo-server.argocd.svc.cluster.local:8084']
-        labels:
-          instance: 'argocd-repo-server'
-          component: 'argocd'
-    
-    # ============================================
-    # KUBERNETES SERVICES
-    # ============================================
-    
-    # Grafana
-    - job_name: 'grafana'
-      static_configs:
-      - targets: ['grafana.grafana.svc.cluster.local:3000']
-        labels:
-          instance: 'grafana'
-          service: 'monitoring'
-    
-    # PostgreSQL
-    - job_name: 'postgresql'
-      static_configs:
-      - targets: ['postgresql.databases.svc.cluster.local:5432']
-        labels:
-          instance: 'postgresql-main'
-          database: 'postgres'
-    
-    # Code Server
-    - job_name: 'code-server'
-      static_configs:
-      - targets: ['code-server.code-server.svc.cluster.local:8080']
-        labels:
-          instance: 'code-server'
-          service: 'development'
-    
-    # Vaultwarden
-    - job_name: 'vaultwarden'
-      static_configs:
-      - targets: ['vaultwarden.vaultwarden.svc.cluster.local:80']
-        labels:
-          instance: 'vaultwarden'
-          service: 'security'
-    
-    # Heimdall
-    - job_name: 'heimdall'
-      static_configs:
-      - targets: ['heimdall.heimdall.svc.cluster.local:80']
-        labels:
-          instance: 'heimdall'
-          service: 'dashboard'
-    
-    # ============================================
-    # CUSTOM APPLICATIONS
-    # ============================================
-    # Add any custom applications that expose metrics on :9090 or similar
-    
-    - job_name: 'kubernetes-pods'
-      kubernetes_sd_configs:
-      - role: pod
-      relabel_configs:
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-        action: keep
-        regex: 'true'
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
-        action: replace
-        target_label: __metrics_path__
-        regex: (.+)
-      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
-        action: replace
-        regex: ([^:]+)(?::\d+)?;(\d+)
-        replacement: $1:$2
-        target_label: __address__
-      - action: labelmap
-        regex: __meta_kubernetes_pod_label_(.+)
-      - source_labels: [__meta_kubernetes_namespace]
-        action: replace
-        target_label: kubernetes_namespace
-      - source_labels: [__meta_kubernetes_pod_name]
-        action: replace
-        target_label: kubernetes_pod_name
