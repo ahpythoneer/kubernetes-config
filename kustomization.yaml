@@ -5,16 +5,18 @@ commonLabels:
   app.kubernetes.io/managed-by: argocd
 
 resources:
-  - manifests/monitoring/namespace.yaml
-  - manifests/monitoring/configmap.yaml
   - manifests/heimdall/namespace.yaml
   - manifests/heimdall/deployment.yaml
   - manifests/vaultwarden/namespace.yaml
   - manifests/vaultwarden/deployment.yaml
   - manifests/code-server/namespace.yaml
   - manifests/code-server/deployment.yaml
-  - manifests/grafana/namespace.yaml
-  - manifests/grafana/deployment.yaml
+  - manifests/monitoring/namespace.yaml
+  - manifests/monitoring/configmap.yaml
+  - manifests/monitoring/node-exporter.yaml
   - manifests/prometheus/namespace.yaml
   - manifests/prometheus/configmap.yaml
   - manifests/prometheus/deployment.yaml
+  - manifests/grafana/namespace.yaml
+  - manifests/grafana/deployment.yaml
+  - manifests/portainer/deployment.yaml
