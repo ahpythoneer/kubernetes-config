@@ -26,7 +26,7 @@ spec:
   loadBalancerIP: 10.0.0.152
   ports:
   - port: 80
-    targetPort: 80
+    targetPort: 3000
     name: http
   - port: 22
     targetPort: 22
@@ -50,9 +50,7 @@ spec:
         app: gitea
     spec:
       securityContext:
-        fsGroup: 0
-        runAsUser: 0
-        runAsGroup: 0
+        fsGroup: 1000
       containers:
       - name: gitea
         image: gitea/gitea:latest
@@ -69,11 +67,13 @@ spec:
         - name: DB_USER
           value: gitea_user
         - name: DB_PASSWD
-          value: Gitea@DB!123
+          value: C0nn3ct@2025
         - name: GITEA__SECURITY__SECRET_KEY
-          value: secretkeyforgitea
-        - name: GITEA__DATABASE__LOG_SQL
-          value: "false"
+          value: secretkeyforgitea12345
+        - name: GITEA__SERVER__ROOT_URL
+          value: http://10.0.0.152/
+        - name: GITEA__SERVER__DOMAIN
+          value: gitea.internal.racktocloud.com
         volumeMounts:
         - name: gitea-data
           mountPath: /data

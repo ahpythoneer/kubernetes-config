@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harbor-storage
+  namespace: harbor
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-storage
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: harbor-admin-secret
+  namespace: harbor
+type: Opaque
+stringData:
+  admin-password: Harbor@Admin123!SecurePass
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: harbor
+  namespace: harbor
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.0.0.151
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  - port: 443
+    targetPort: 443
+    name: https
+  selector:
+    app: harbor
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harbor
+  namespace: harbor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: harbor
+  template:
+    metadata:
+      labels:
+        app: harbor
+    spec:
+      securityContext:
+        fsGroup: 0
+      containers:
+      - name: harbor
+        image: goharbor/harbor-core:v2.14.2
+        ports:
+        - containerPort: 80
+        - containerPort: 443
+        env:
+        - name: HARBOR_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: harbor-admin-secret
+              key: admin-password
+        - name: HARBOR_DATABASE_HOST
+          value: postgresql.databases.svc.cluster.local
+        - name: HARBOR_DATABASE_PASSWORD
+          value: C0nn3ct@2025
+        - name: HARBOR_DATABASE_DB_NAME
+          value: harbor
+        - name: CORE_URL
+          value: http://harbor:80
+        volumeMounts:
+        - name: harbor-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+      volumes:
+      - name: harbor-data
+        persistentVolumeClaim:
+          claimName: harbor-storage
