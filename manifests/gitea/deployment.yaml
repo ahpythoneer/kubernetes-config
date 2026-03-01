@@ -51,6 +51,13 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
+      initContainers:
+      - name: fix-permissions
+        image: busybox:latest
+        command: ['sh', '-c', 'mkdir -p /data/ssh && chmod 700 /data/ssh && chmod 600 /data/ssh/* 2>/dev/null || true']
+        volumeMounts:
+        - name: gitea-data
+          mountPath: /data
       containers:
       - name: gitea
         image: gitea/gitea:latest
