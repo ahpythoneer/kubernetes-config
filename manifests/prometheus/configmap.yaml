@@ -132,10 +132,10 @@ data:
     - job_name: 'node-exporter-static'
       static_configs:
       - targets:
-        - 'infmk8s-n01:9100'
-        - 'infmk8s-n02:9100'
-        - 'infwk8s-n01:9100'
-        - 'infwk8s-n02:9100'
+        - '10.0.0.100:9100'
+        - '10.0.0.101:9100'
+        - '10.0.0.102:9100'
+        - '10.0.0.103:9100'
         labels:
           environment: 'production'
     
