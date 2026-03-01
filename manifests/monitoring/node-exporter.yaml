@@ -11,9 +11,15 @@ spec:
     metadata:
       labels:
         app: node-exporter
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/node-exporter: unconfined
     spec:
       hostNetwork: true
       hostPID: true
+      hostIPC: true
+      securityContext:
+        privileged: true
+        runAsUser: 0
       containers:
       - name: node-exporter
         image: prom/node-exporter:latest
@@ -25,6 +31,9 @@ spec:
           - '--path.procfs=/proc'
           - '--path.sysfs=/sys'
           - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+        securityContext:
+          privileged: true
+          runAsUser: 0
         volumeMounts:
         - name: rootfs
           mountPath: /rootfs
@@ -42,6 +51,11 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "250m"
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
       volumes:
       - name: rootfs
         hostPath:
@@ -52,16 +66,3 @@ spec:
       - name: sysfs
         hostPath:
           path: /sys
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: node-exporter
-  namespace: monitoring
-spec:
-  type: ClusterIP
-  ports:
-  - port: 9100
-    targetPort: 9100
-  selector:
-    app: node-exporter
