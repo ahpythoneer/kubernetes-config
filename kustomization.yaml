@@ -7,7 +7,6 @@ commonLabels:
 resources:
   # Monitoring
   - manifests/monitoring/namespace.yaml
-  - manifests/monitoring/configmap.yaml
   - manifests/monitoring/node-exporter.yaml
   
   # Heimdall
