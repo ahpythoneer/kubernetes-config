@@ -8,7 +8,7 @@ spec:
   loadBalancerIP: 10.0.0.162
   ports:
   - port: 80
-    targetPort: 8081
+    targetPort: 8080
     name: http
   selector:
     app: hubble-ui
