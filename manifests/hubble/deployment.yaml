@@ -38,7 +38,9 @@ spec:
         - name: HUBBLE_METRICS_PORT
           value: "6543"
         - name: HUBBLE_SERVER
-          value: "hubble-relay:80"
+          value: "hubble-relay.kube-system.svc.cluster.local:80"
+        - name: HUBBLE_UI_BACKEND_PORT
+          value: "8090"
         resources:
           requests:
             memory: "256Mi"
