@@ -29,8 +29,13 @@ resources:
   # Prometheus
   - manifests/prometheus/namespace.yaml
   - manifests/prometheus/configmap.yaml
+  - manifests/prometheus/rbac.yaml  #
   - manifests/prometheus/deployment.yaml
   
   # Portainer (Storage Monitoring)
   - manifests/portainer/namespace.yaml
   - manifests/portainer/deployment.yaml
+
+    # Hubble Network Monitoring
+  - manifests/hubble/namespace.yaml
+  - manifests/hubble/deployment.yaml
