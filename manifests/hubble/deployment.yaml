@@ -33,14 +33,12 @@ spec:
       - name: hubble-ui
         image: quay.io/cilium/hubble-ui:v0.13.0
         ports:
-        - containerPort: 8081
+        - containerPort: 8080
         env:
         - name: HUBBLE_METRICS_PORT
           value: "6543"
         - name: HUBBLE_SERVER
           value: "hubble-relay.kube-system.svc.cluster.local:80"
-        - name: HUBBLE_UI_BACKEND_PORT
-          value: "8090"
         resources:
           requests:
             memory: "256Mi"
