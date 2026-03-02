@@ -31,3 +31,7 @@ resources:
   - manifests/prometheus/configmap.yaml
   - manifests/prometheus/rbac.yaml  #
   - manifests/prometheus/deployment.yaml
+
+  # Vault Secret Manager
+  - manifests/vault/namespace.yaml
+  - manifests/vault/application.yaml

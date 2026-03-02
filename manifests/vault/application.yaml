@@ -1,0 +1,53 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://helm.releases.hashicorp.com
+    chart: vault
+    targetRevision: "0.27.0"
+    helm:
+      releaseName: vault
+      values: |
+        server:
+          dataStorage:
+            enabled: true
+            size: 20Gi
+            storageClass: "nfs-storage"
+          service:
+            type: LoadBalancer
+            loadBalancerIP: 10.0.0.163
+          dataStoragePath: "/vault/data"
+          logLevel: "info"
+          affinity: ""
+          tolerations: []
+        
+        ui:
+          enabled: true
+          serviceType: "ClusterIP"
+          serviceNodePort: null
+          externalPort: 8200
+        
+        injector:
+          enabled: true
+          replicas: 1
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vault
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
