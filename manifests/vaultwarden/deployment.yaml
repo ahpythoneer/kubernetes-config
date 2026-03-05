@@ -5,7 +5,7 @@ metadata:
   namespace: vaultwarden
 spec:
   accessModes:
-    - ReadWriteOnce
+  - ReadWriteOnce
   storageClassName: nfs-storage
   resources:
     requests:
@@ -41,7 +41,7 @@ metadata:
   namespace: vaultwarden
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/proxy-body-size: "512m"
+    nginx.ingress.kubernetes.io/proxy-body-size: 512m
 spec:
   ingressClassName: nginx
   tls:
@@ -74,6 +74,12 @@ spec:
     metadata:
       labels:
         app: vaultwarden
+      annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/role: vaultwarden
+        vault.hashicorp.com/agent-inject-secret-vaultwarden: secret/data/vaultwarden/config
+        vault.hashicorp.com/agent-inject-template-vaultwarden: '{{- with secret "secret/data/vaultwarden/config"
+          -}}\nexport ADMIN_TOKEN="{{ .Data.data.password }}"\n{{- end }}'
     spec:
       containers:
       - name: vaultwarden
@@ -82,27 +88,23 @@ spec:
         - containerPort: 80
         env:
         - name: DOMAIN
-          value: "https://k8vault.racktocloud.com"
+          value: https://k8vault.racktocloud.com
         - name: SIGNUPS_ALLOWED
-          value: "false"
-        - name: ADMIN_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: vaultwarden-secrets
-              key: admin-token
+          value: 'false'
         - name: LOG_LEVEL
-          value: "info"
+          value: info
         volumeMounts:
         - name: vaultwarden-data
           mountPath: /data
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "250m"
+            memory: 256Mi
+            cpu: 250m
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: 512Mi
+            cpu: 500m
       volumes:
       - name: vaultwarden-data
         persistentVolumeClaim:
           claimName: vaultwarden-storage
+      serviceAccountName: vaultwarden

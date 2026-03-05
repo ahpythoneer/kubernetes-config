@@ -5,7 +5,7 @@ metadata:
   namespace: heimdall
 spec:
   accessModes:
-    - ReadWriteOnce
+  - ReadWriteOnce
   storageClassName: nfs-storage
   resources:
     requests:
@@ -43,6 +43,12 @@ spec:
     metadata:
       labels:
         app: heimdall
+      annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/role: heimdall
+        vault.hashicorp.com/agent-inject-secret-heimdall: secret/data/heimdall
+        vault.hashicorp.com/agent-inject-template-heimdall: '{{- with secret "secret/data/heimdall"
+          -}}\nexport ADMIN_PASSWORD="{{ .Data.data.password }}"\n{{- end }}'
     spec:
       securityContext:
         fsGroup: 1000
@@ -54,22 +60,23 @@ spec:
         - containerPort: 443
         env:
         - name: PUID
-          value: "1000"
+          value: '1000'
         - name: PGID
-          value: "1000"
+          value: '1000'
         - name: TZ
-          value: "UTC"
+          value: UTC
         volumeMounts:
         - name: config
           mountPath: /config
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: 128Mi
+            cpu: 100m
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: 512Mi
+            cpu: 500m
       volumes:
       - name: config
         persistentVolumeClaim:
           claimName: heimdall-storage
+      serviceAccountName: heimdall

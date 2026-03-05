@@ -5,7 +5,7 @@ metadata:
   namespace: grafana
 spec:
   accessModes:
-    - ReadWriteOnce
+  - ReadWriteOnce
   storageClassName: nfs-storage
   resources:
     requests:
@@ -49,6 +49,13 @@ spec:
     metadata:
       labels:
         app: grafana
+      annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/role: grafana
+        vault.hashicorp.com/agent-inject-secret-grafana: secret/data/grafana/admin
+        vault.hashicorp.com/agent-inject-template-grafana: '{{- with secret "secret/data/grafana/admin"
+          -}}\nexport GF_SECURITY_ADMIN_PASSWORD="{{ .Data.data.password }}"\n{{-
+          end }}'
     spec:
       containers:
       - name: grafana
@@ -56,24 +63,20 @@ spec:
         ports:
         - containerPort: 3000
         env:
-        - name: GF_SECURITY_ADMIN_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: grafana-secrets
-              key: admin-password
         - name: GF_SECURITY_ADMIN_USER
-          value: "admin"
+          value: admin
         volumeMounts:
         - name: grafana-storage
           mountPath: /var/lib/grafana
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "250m"
+            memory: 256Mi
+            cpu: 250m
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: 512Mi
+            cpu: 500m
       volumes:
       - name: grafana-storage
         persistentVolumeClaim:
           claimName: grafana-storage
+      serviceAccountName: grafana

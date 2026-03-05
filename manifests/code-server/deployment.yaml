@@ -5,7 +5,7 @@ metadata:
   namespace: code-server
 spec:
   accessModes:
-    - ReadWriteOnce
+  - ReadWriteOnce
   storageClassName: nfs-storage
   resources:
     requests:
@@ -49,34 +49,31 @@ spec:
     metadata:
       labels:
         app: code-server
+      annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/role: code-server
+        vault.hashicorp.com/agent-inject-secret-code-server: secret/data/code-server
+        vault.hashicorp.com/agent-inject-template-code-server: '{{- with secret "secret/data/code-server"
+          -}}\nexport PASSWORD="{{ .Data.data.password }}"\n{{- end }}'
     spec:
       containers:
       - name: code-server
         image: codercom/code-server:latest
         ports:
         - containerPort: 8443
-        env:
-        - name: PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: code-server-secrets
-              key: password
-        - name: SUDO_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: code-server-secrets
-              key: password
+        env: null
         volumeMounts:
         - name: code-server-data
           mountPath: /home/coder
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: 512Mi
+            cpu: 500m
           limits:
-            memory: "1Gi"
-            cpu: "1000m"
+            memory: 1Gi
+            cpu: 1000m
       volumes:
       - name: code-server-data
         persistentVolumeClaim:
           claimName: code-server-storage
+      serviceAccountName: code-server
