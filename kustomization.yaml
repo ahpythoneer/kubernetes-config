@@ -35,3 +35,10 @@ resources:
   # Vault Secret Manager
   - manifests/vault/namespace.yaml
   - manifests/vault/application.yaml
+
+  # Ollama GPU
+  - manifests/ollama/namespace.yaml
+  - manifests/ollama/rbac.yaml
+  - manifests/ollama/pvc.yaml
+  - manifests/ollama/service.yaml
+  - manifests/ollama/deployment.yaml
