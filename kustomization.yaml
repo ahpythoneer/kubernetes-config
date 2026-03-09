@@ -48,7 +48,8 @@ resources:
   - manifests/joplin/rbac.yaml
   - manifests/joplin/deployment.yaml
   - manifests/joplin/service.yaml
-  - manifests/joplin/ingress.yaml    
+  - manifests/joplin/ingress.yaml
+  - manifests/joplin/secret.yaml    
   
   # Browser Service
   - manifests/browser-service/namespace.yaml
