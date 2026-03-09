@@ -42,3 +42,22 @@ resources:
   - manifests/ollama/pvc.yaml
   - manifests/ollama/service.yaml
   - manifests/ollama/deployment.yaml
+
+  # Joplin Server
+  - manifests/joplin/namespace.yaml
+  - manifests/joplin/rbac.yaml
+  - manifests/joplin/deployment.yaml
+  - manifests/joplin/service.yaml
+  - manifests/joplin/ingress.yaml    
+  
+  # Browser Service
+  - manifests/browser-service/namespace.yaml
+  - manifests/browser-service/rbac.yaml
+  - manifests/browser-service/deployment.yaml
+  - manifests/browser-service/service.yaml
+  
+  # Research Worker
+  - manifests/research-worker/namespace.yaml
+  - manifests/research-worker/rbac.yaml
+  - manifests/research-worker/configmap.yaml
+  - manifests/research-worker/cronjob.yaml

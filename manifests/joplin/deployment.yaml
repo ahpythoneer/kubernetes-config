@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: joplin-server
+  namespace: joplin
+  labels:
+    app: joplin-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: joplin-server
+  template:
+    metadata:
+      labels:
+        app: joplin-server
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "joplin"
+        vault.hashicorp.com/agent-inject-secret-db: "secret/data/joplin/database"
+        vault.hashicorp.com/agent-inject-secret-server: "secret/data/joplin/server"
+        vault.hashicorp.com/agent-inject-template-db: |
+          {{- with secret "secret/data/joplin/database" -}}
+          export POSTGRES_USER="{{ .Data.data.postgres_user }}"
+          export POSTGRES_PASSWORD="{{ .Data.data.postgres_password }}"
+          export POSTGRES_HOST="{{ .Data.data.postgres_host }}"
+          export POSTGRES_PORT="{{ .Data.data.postgres_port }}"
+          export POSTGRES_DATABASE="{{ .Data.data.database_name }}"
+          {{- end }}
+        vault.hashicorp.com/agent-inject-template-server: |
+          {{- with secret "secret/data/joplin/server" -}}
+          export ADMIN_TOKEN="{{ .Data.data.admin_token }}"
+          export JWT_SECRET="{{ .Data.data.jwt_secret }}"
+          export APP_BASE_URL="{{ .Data.data.app_base_url }}"
+          {{- end }}
+    spec:
+      serviceAccountName: joplin
+      containers:
+      - name: joplin-server
+        image: joplin/server:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 22300
+          protocol: TCP
+        env:
+        - name: APP_BASE_URL
+          value: "https://joplin.racktocloud.com"
+        - name: DB_CLIENT
+          value: "pg"
+        livenessProbe:
+          httpGet:
+            path: /api/ping
+            port: 22300
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/ping
+            port: 22300
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
