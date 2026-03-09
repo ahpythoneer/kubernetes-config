@@ -3,8 +3,6 @@ kind: Deployment
 metadata:
   name: joplin-server
   namespace: joplin
-  labels:
-    app: joplin-server
 spec:
   replicas: 1
   selector:
@@ -20,11 +18,11 @@ spec:
         vault.hashicorp.com/agent-inject-secret-db: "secret/data/joplin/database"
         vault.hashicorp.com/agent-inject-template-db: |
           {{- with secret "secret/data/joplin/database" -}}
-          export POSTGRES_USER="{{ .Data.data.postgres_user }}"
-          export POSTGRES_PASSWORD="{{ .Data.data.postgres_password }}"
-          export POSTGRES_HOST="{{ .Data.data.postgres_host }}"
-          export POSTGRES_PORT="{{ .Data.data.postgres_port }}"
-          export POSTGRES_DATABASE="{{ .Data.data.database_name }}"
+          postgres_user={{ .Data.data.postgres_user }}
+          postgres_password={{ .Data.data.postgres_password }}
+          postgres_host={{ .Data.data.postgres_host }}
+          postgres_port={{ .Data.data.postgres_port }}
+          postgres_database={{ .Data.data.database_name }}
           {{- end }}
     spec:
       serviceAccountName: joplin
@@ -41,31 +39,43 @@ spec:
           value: "https://joplin.racktocloud.com"
         - name: DB_CLIENT
           value: "pg"
-        # These will be injected by Vault
-        - name: POSTGRES_USER
-          value: "joplin"
-        - name: POSTGRES_PASSWORD
-          value: "placeholder"
         - name: POSTGRES_HOST
-          value: "postgresql.databases.svc.cluster.local"
+          valueFrom:
+            secretKeyRef:
+              name: joplin-db
+              key: postgres_host
         - name: POSTGRES_PORT
-          value: "5432"
+          valueFrom:
+            secretKeyRef:
+              name: joplin-db
+              key: postgres_port
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: joplin-db
+              key: postgres_user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: joplin-db
+              key: postgres_password
         - name: POSTGRES_DATABASE
-          value: "joplin"
+          valueFrom:
+            secretKeyRef:
+              name: joplin-db
+              key: postgres_database
         livenessProbe:
           httpGet:
             path: /api/ping
             port: 22300
           initialDelaySeconds: 60
           periodSeconds: 10
-          timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /api/ping
             port: 22300
           initialDelaySeconds: 30
           periodSeconds: 5
-          timeoutSeconds: 5
         resources:
           requests:
             memory: "512Mi"
