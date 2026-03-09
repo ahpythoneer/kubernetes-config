@@ -58,14 +58,18 @@ spec:
           httpGet:
             path: /api/ping
             port: 22300
-          initialDelaySeconds: 60
+          initialDelaySeconds: 90
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 10
         readinessProbe:
           httpGet:
             path: /api/ping
             port: 22300
-          initialDelaySeconds: 30
-          periodSeconds: 5
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 10
         resources:
           requests:
             memory: "512Mi"
