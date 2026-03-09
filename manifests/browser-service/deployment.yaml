@@ -37,19 +37,23 @@ spec:
         - name: MAX_CONCURRENT_SESSIONS
           value: "5"
         - name: TIMEOUT
-          value: "60000"
+          value: "120000"
+        - name: CHROME_HEADLESS
+          value: "true"
         livenessProbe:
           httpGet:
-            path: /health
+            path: /
             port: 3000
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 10
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
-            path: /health
+            path: /
             port: 3000
-          initialDelaySeconds: 10
+          initialDelaySeconds: 30
           periodSeconds: 5
+          timeoutSeconds: 5
         resources:
           requests:
             memory: "1Gi"
