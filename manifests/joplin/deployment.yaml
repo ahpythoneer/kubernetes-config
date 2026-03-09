@@ -3,6 +3,8 @@ kind: Deployment
 metadata:
   name: joplin-server
   namespace: joplin
+  labels:
+    app: joplin-server
 spec:
   replicas: 1
   selector:
@@ -24,11 +26,14 @@ spec:
         ports:
         - name: http
           containerPort: 22300
+          protocol: TCP
         env:
         - name: APP_BASE_URL
           value: "https://joplin.racktocloud.com"
         - name: DB_CLIENT
           value: "pg"
+        - name: TRUSTED_DOMAINS
+          value: "localhost,127.0.0.1,joplin-server:22300,10.100.0.0/16"
         - name: POSTGRES_HOST
           valueFrom:
             secretKeyRef:
