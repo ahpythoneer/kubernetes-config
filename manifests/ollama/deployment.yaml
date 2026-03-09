@@ -24,14 +24,15 @@ spec:
           {{- end }}
     spec:
       affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - infwk8s-n01
+              nodeAffinity:
+                preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                    - key: workload.ai
+                      operator: In
+                      values:
+                      - ollama
       
       serviceAccountName: ollama
       
