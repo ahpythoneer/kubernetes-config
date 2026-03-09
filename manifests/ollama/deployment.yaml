@@ -23,7 +23,6 @@ spec:
           export OLLAMA_API_KEY="{{ .Data.data.api_key }}"
           {{- end }}
     spec:
-      # Deploy on GPU node
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -39,6 +38,7 @@ spec:
       containers:
       - name: ollama
         image: ollama/ollama:latest
+        imagePullPolicy: IfNotPresent
         
         ports:
         - name: http
@@ -47,29 +47,25 @@ spec:
         env:
         - name: OLLAMA_HOST
           value: "0.0.0.0:11434"
-        - name: OLLAMA_MODELS
-          value: "/root/.ollama/models"
         
-        # GPU resources
         resources:
           requests:
             nvidia.com/gpu: 1
-            memory: "8Gi"
-            cpu: "4"
+            memory: "4Gi"
+            cpu: "2"
           limits:
             nvidia.com/gpu: 1
-            memory: "16Gi"
-            cpu: "8"
+            memory: "12Gi"
+            cpu: "4"
         
         volumeMounts:
         - name: ollama-models
           mountPath: /root/.ollama/models
-        - name: ollama-cache
-          mountPath: /root/.cache
+        
+        securityContext:
+          privileged: true
       
       volumes:
       - name: ollama-models
         persistentVolumeClaim:
           claimName: ollama-models
-      - name: ollama-cache
-        emptyDir: {}
