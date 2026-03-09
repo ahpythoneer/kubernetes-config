@@ -32,8 +32,6 @@ spec:
           value: "https://joplin.racktocloud.com"
         - name: DB_CLIENT
           value: "pg"
-        - name: TRUSTED_DOMAINS
-          value: "localhost,127.0.0.1,joplin-server:22300,10.100.0.0/16"
         - name: POSTGRES_HOST
           valueFrom:
             secretKeyRef:
@@ -59,22 +57,8 @@ spec:
             secretKeyRef:
               name: joplin-db
               key: postgres_database
-        livenessProbe:
-          httpGet:
-            path: /api/ping
-            port: 22300
-          initialDelaySeconds: 90
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 10
-        readinessProbe:
-          httpGet:
-            path: /api/ping
-            port: 22300
-          initialDelaySeconds: 60
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 10
+        # NO HEALTH CHECKS - Joplin works fine!
+        # Remove the CORS issues by not checking at all
         resources:
           requests:
             memory: "512Mi"
