@@ -32,6 +32,8 @@ spec:
           value: "https://joplin.racktocloud.com"
         - name: DB_CLIENT
           value: "pg"
+        - name: TRUSTED_DOMAINS
+          value: "localhost,127.0.0.1,joplin-server,joplin-server.joplin,joplin-server.joplin.svc.cluster.local,10.0.0.0/8"
         - name: POSTGRES_HOST
           valueFrom:
             secretKeyRef:
