@@ -4,12 +4,15 @@ metadata:
   name: joplin-tls
   namespace: joplin
 spec:
+  secretName: joplin-tls
+  duration: 2160h # 90d
+  renewBefore: 720h # 30d
   dnsNames:
   - joplin.racktocloud.com
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
-  secretName: joplin-tls
+  # EXPLICITLY USE DNS01 WITH CLOUDFLARE
   usages:
   - digital signature
   - key encipherment

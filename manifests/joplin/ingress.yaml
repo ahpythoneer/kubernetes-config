@@ -5,6 +5,7 @@ metadata:
   namespace: joplin
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    # NO cert-manager annotations - cert is managed separately!
 spec:
   ingressClassName: nginx
   tls:
