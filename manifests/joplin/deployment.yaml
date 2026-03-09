@@ -18,7 +18,6 @@ spec:
         vault.hashicorp.com/agent-inject: "true"
         vault.hashicorp.com/role: "joplin"
         vault.hashicorp.com/agent-inject-secret-db: "secret/data/joplin/database"
-        vault.hashicorp.com/agent-inject-secret-server: "secret/data/joplin/server"
         vault.hashicorp.com/agent-inject-template-db: |
           {{- with secret "secret/data/joplin/database" -}}
           export POSTGRES_USER="{{ .Data.data.postgres_user }}"
@@ -26,12 +25,6 @@ spec:
           export POSTGRES_HOST="{{ .Data.data.postgres_host }}"
           export POSTGRES_PORT="{{ .Data.data.postgres_port }}"
           export POSTGRES_DATABASE="{{ .Data.data.database_name }}"
-          {{- end }}
-        vault.hashicorp.com/agent-inject-template-server: |
-          {{- with secret "secret/data/joplin/server" -}}
-          export ADMIN_TOKEN="{{ .Data.data.admin_token }}"
-          export JWT_SECRET="{{ .Data.data.jwt_secret }}"
-          export APP_BASE_URL="{{ .Data.data.app_base_url }}"
           {{- end }}
     spec:
       serviceAccountName: joplin
@@ -48,18 +41,31 @@ spec:
           value: "https://joplin.racktocloud.com"
         - name: DB_CLIENT
           value: "pg"
+        # These will be injected by Vault
+        - name: POSTGRES_USER
+          value: "joplin"
+        - name: POSTGRES_PASSWORD
+          value: "placeholder"
+        - name: POSTGRES_HOST
+          value: "postgresql.databases.svc.cluster.local"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DATABASE
+          value: "joplin"
         livenessProbe:
           httpGet:
             path: /api/ping
             port: 22300
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 10
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /api/ping
             port: 22300
-          initialDelaySeconds: 10
+          initialDelaySeconds: 30
           periodSeconds: 5
+          timeoutSeconds: 5
         resources:
           requests:
             memory: "512Mi"
