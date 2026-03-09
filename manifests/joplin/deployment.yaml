@@ -15,15 +15,6 @@ spec:
       annotations:
         vault.hashicorp.com/agent-inject: "true"
         vault.hashicorp.com/role: "joplin"
-        vault.hashicorp.com/agent-inject-secret-db: "secret/data/joplin/database"
-        vault.hashicorp.com/agent-inject-template-db: |
-          {{- with secret "secret/data/joplin/database" -}}
-          postgres_user={{ .Data.data.postgres_user }}
-          postgres_password={{ .Data.data.postgres_password }}
-          postgres_host={{ .Data.data.postgres_host }}
-          postgres_port={{ .Data.data.postgres_port }}
-          postgres_database={{ .Data.data.database_name }}
-          {{- end }}
     spec:
       serviceAccountName: joplin
       containers:
@@ -33,7 +24,6 @@ spec:
         ports:
         - name: http
           containerPort: 22300
-          protocol: TCP
         env:
         - name: APP_BASE_URL
           value: "https://joplin.racktocloud.com"
