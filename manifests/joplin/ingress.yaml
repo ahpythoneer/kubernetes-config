@@ -4,8 +4,6 @@ metadata:
   name: joplin-ingress
   namespace: joplin
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-    acme.cert-manager.io/http01-edit-in-place: "false"  # ← DISABLE HTTP01
     nginx.ingress.kubernetes.io/proxy-body-size: "0"
 spec:
   ingressClassName: nginx
