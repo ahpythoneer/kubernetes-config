@@ -14,50 +14,60 @@ spec:
     metadata:
       labels:
         app: ollama
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "ollama"
+        vault.hashicorp.com/agent-inject-secret-ollama: "secret/data/ollama/api"
+        vault.hashicorp.com/agent-inject-template-ollama: |
+          {{- with secret "secret/data/ollama/api" -}}
+          export OLLAMA_MODEL_API_KEY="{{ .Data.data.model_api_key }}"
+          export OLLAMA_ADMIN_KEY="{{ .Data.data.admin_key }}"
+          {{- end }}
     spec:
       affinity:
-              nodeAffinity:
-                preferredDuringSchedulingIgnoredDuringExecution:
-                - weight: 100
-                  preference:
-                    matchExpressions:
-                    - key: workload.ai
-                      operator: In
-                      values:
-                      - ollama
-      
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - infwk8s-n01
       serviceAccountName: ollama
-      
       containers:
       - name: ollama
         image: ollama/ollama:latest
         imagePullPolicy: IfNotPresent
-        
         ports:
         - name: http
           containerPort: 11434
-        
         env:
         - name: OLLAMA_HOST
           value: "0.0.0.0:11434"
-        
         resources:
           requests:
             nvidia.com/gpu: 1
-            memory: "4Gi"
-            cpu: "2"
+            memory: "6Gi"
+            cpu: "4"
           limits:
             nvidia.com/gpu: 1
-            memory: "12Gi"
-            cpu: "4"
-        
+            memory: "14Gi"
+            cpu: "8"
         volumeMounts:
         - name: ollama-models
           mountPath: /root/.ollama/models
-        
-        securityContext:
-          privileged: true
-      
+        livenessProbe:
+          httpGet:
+            path: /api/tags
+            port: 11434
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/tags
+            port: 11434
+          initialDelaySeconds: 30
+          periodSeconds: 5
       volumes:
       - name: ollama-models
         persistentVolumeClaim:
