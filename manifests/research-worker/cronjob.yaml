@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: enhance-notes
+  namespace: research-worker
+spec:
+  schedule: "0 */6 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          annotations:
+            vault.hashicorp.com/agent-inject: "true"
+            vault.hashicorp.com/role: "research-worker"
+            vault.hashicorp.com/agent-inject-secret-config: "secret/data/research-worker/config"
+            vault.hashicorp.com/agent-inject-template-config: |
+              {{- with secret "secret/data/research-worker/config" -}}
+              export JOPLIN_TOKEN="{{ .Data.data.joplin_token }}"
+              export OLLAMA_API_KEY="{{ .Data.data.ollama_api_key }}"
+              export WEB_SEARCH_API_KEY="{{ .Data.data.web_search_api_key }}"
+              {{- end }}
+        spec:
+          serviceAccountName: research-worker
+          containers:
+          - name: research-worker
+            image: python:3.11-slim
+            imagePullPolicy: IfNotPresent
+            command:
+            - /bin/bash
+            - -c
+            - |
+              source /vault/secrets/config
+              python /app/enhance_notes.py
+            env:
+            - name: JOPLIN_HOST
+              value: "http://joplin-server.joplin:22300"
+            - name: OLLAMA_HOST
+              value: "http://ollama.ollama:11434"
+            - name: BROWSER_HOST
+              value: "http://browser-service.browser-service:3000"
+            volumeMounts:
+            - name: scripts
+              mountPath: /app
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "500m"
+              limits:
+                memory: "1Gi"
+                cpu: "1000m"
+          volumes:
+          - name: scripts
+            configMap:
+              name: research-scripts
+          restartPolicy: OnFailure

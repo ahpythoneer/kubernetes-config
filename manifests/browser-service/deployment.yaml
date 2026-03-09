@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: browser-service
+  namespace: browser-service
+  labels:
+    app: browser-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: browser-service
+  template:
+    metadata:
+      labels:
+        app: browser-service
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "browser-service"
+        vault.hashicorp.com/agent-inject-secret-config: "secret/data/browser-service/config"
+        vault.hashicorp.com/agent-inject-template-config: |
+          {{- with secret "secret/data/browser-service/config" -}}
+          export BROWSER_API_KEY="{{ .Data.data.api_key }}"
+          export CHROME_WS="{{ .Data.data.chrome_ws }}"
+          {{- end }}
+    spec:
+      serviceAccountName: browser-service
+      containers:
+      - name: browser
+        image: browserless/chrome:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        env:
+        - name: MAX_CONCURRENT_SESSIONS
+          value: "5"
+        - name: TIMEOUT
+          value: "60000"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "1000m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"

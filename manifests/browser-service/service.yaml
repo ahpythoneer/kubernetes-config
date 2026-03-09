@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: browser-service
+  namespace: browser-service
+  labels:
+    app: browser-service
+spec:
+  type: ClusterIP
+  selector:
+    app: browser-service
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000
+    protocol: TCP
