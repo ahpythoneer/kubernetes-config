@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: joplin-tls
+  namespace: joplin
+spec:
+  dnsNames:
+  - joplin.racktocloud.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  secretName: joplin-tls
+  usages:
+  - digital signature
+  - key encipherment
