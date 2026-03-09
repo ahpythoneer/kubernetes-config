@@ -14,14 +14,6 @@ spec:
     metadata:
       labels:
         app: ollama
-      annotations:
-        vault.hashicorp.com/agent-inject: "true"
-        vault.hashicorp.com/role: "ollama"
-        vault.hashicorp.com/agent-inject-secret-ollama: "secret/data/ollama/config"
-        vault.hashicorp.com/agent-inject-template-ollama: |
-          {{- with secret "secret/data/ollama/config" -}}
-          export OLLAMA_API_KEY="{{ .Data.data.api_key }}"
-          {{- end }}
     spec:
       affinity:
               nodeAffinity:
