@@ -1,0 +1,15 @@
+env:
+        - name: JOPLIN_HOST
+          value: "http://joplin-server.joplin:22300"
+        - name: JOPLIN_USER_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: joplin-ai-user
+              key: email
+        - name: JOPLIN_USER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: joplin-ai-user
+              key: password
+        - name: OLLAMA_HOST
+          value: "http://ollama.ollama:11434"

@@ -12,23 +12,56 @@ data:
     from datetime import datetime
     
     JOPLIN_HOST = os.getenv('JOPLIN_HOST', 'http://joplin-server.joplin:22300')
+    JOPLIN_EMAIL = os.getenv('JOPLIN_USER_EMAIL')
+    JOPLIN_PASSWORD = os.getenv('JOPLIN_USER_PASSWORD')
     OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://ollama.ollama:11434')
-    BROWSER_HOST = os.getenv('BROWSER_HOST', 'http://browser-service.browser-service:3000')
     
-    def get_notes_needing_enhancement():
-        """Get notes tagged for enhancement"""
+    def get_auth_token():
+        """Login to Joplin and get auth token"""
         try:
-            token = os.getenv('JOPLIN_TOKEN')
+            response = requests.post(
+                f'{JOPLIN_HOST}/api/auth/login',
+                json={
+                    'email': JOPLIN_EMAIL,
+                    'password': JOPLIN_PASSWORD
+                }
+            )
+            data = response.json()
+            if 'auth_token' in data:
+                return data['auth_token']
+            else:
+                print(f"Login failed: {data}")
+                return None
+        except Exception as e:
+            print(f"Error logging in: {e}")
+            return None
+    
+    def get_joplin_notes(token):
+        """Get all notes from Joplin"""
+        try:
             headers = {'Authorization': f'Bearer {token}'}
             response = requests.get(
                 f'{JOPLIN_HOST}/api/notes',
-                headers=headers,
-                params={'tags': 'needs-enhancement'}
+                headers=headers
             )
             return response.json().get('items', [])
         except Exception as e:
             print(f"Error getting notes: {e}")
             return []
+    
+    def update_joplin_note(token, note_id, content):
+        """Update note in Joplin"""
+        try:
+            headers = {'Authorization': f'Bearer {token}'}
+            response = requests.put(
+                f'{JOPLIN_HOST}/api/notes/{note_id}',
+                headers=headers,
+                json={'body': content}
+            )
+            return response.json()
+        except Exception as e:
+            print(f"Error updating note: {e}")
+            return None
     
     def call_ollama(model, prompt):
         """Call Ollama API"""
@@ -44,6 +77,37 @@ data:
             return ''
     
     if __name__ == '__main__':
-        print(f"Research worker started at {datetime.now()}")
-        notes = get_notes_needing_enhancement()
-        print(f"Found {len(notes)} notes to enhance")
+        print(f"AI Research Worker started at {datetime.now()}")
+        
+        # Login to Joplin
+        print("Authenticating with Joplin...")
+        token = get_auth_token()
+        
+        if not token:
+            print("Failed to authenticate with Joplin!")
+            exit(1)
+        
+        print(f"✓ Authenticated as {JOPLIN_EMAIL}")
+        
+        # Get notes
+        notes = get_joplin_notes(token)
+        print(f"Found {len(notes)} notes")
+        
+        # Enhance first 3 notes
+        for note in notes[:3]:
+            print(f"\nProcessing: {note.get('title', 'Unknown')}")
+            
+            # Enhance with Mistral
+            original = note.get('body', '')
+            enhancement_prompt = f"Enhance and improve this note:\n\n{original}"
+            
+            enhanced = call_ollama('mistral', enhancement_prompt)
+            
+            if enhanced:
+                # Update the note
+                result = update_joplin_note(token, note['id'], enhanced)
+                print(f"✓ Enhanced and saved!")
+            else:
+                print(f"✗ Enhancement failed")
+        
+        print(f"\nResearch Worker completed at {datetime.now()}")
