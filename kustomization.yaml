@@ -61,4 +61,5 @@ resources:
   - manifests/research-worker/namespace.yaml
   - manifests/research-worker/rbac.yaml
   - manifests/research-worker/configmap.yaml
+  - manifests/research-worker/deployment.yaml
   - manifests/research-worker/cronjob.yaml
