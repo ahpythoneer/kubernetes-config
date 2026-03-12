@@ -39,6 +39,8 @@ spec:
               key: password
         - name: OLLAMA_HOST
           value: "http://ollama.ollama:11434"
+        - name: TRUSTED_DOMAINS
+          value: "localhost,127.0.0.1,joplin.racktocloud.com,joplin-server,joplin-server.joplin,joplin-server.joplin.svc.cluster.local,research-worker.research-worker,research-worker.research-worker.svc.cluster.local,10.0.0.0/8,172.0.0.0/8"
         volumeMounts:
         - name: scripts
           mountPath: /app
