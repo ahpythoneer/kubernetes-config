@@ -1,4 +1,30 @@
-env:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-worker
+  namespace: research-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: research-worker
+  template:
+    metadata:
+      labels:
+        app: research-worker
+    spec:
+      serviceAccountName: research-worker
+      containers:
+      - name: research-worker
+        image: python:3.11-slim
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          pip install requests --quiet
+          python /app/enhance_notes.py
+        env:
         - name: JOPLIN_HOST
           value: "http://joplin-server.joplin:22300"
         - name: JOPLIN_USER_EMAIL
@@ -11,5 +37,24 @@ env:
             secretKeyRef:
               name: joplin-ai-user
               key: password
+        - name: JOPLIN_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: joplin-ai-user
+              key: auth_token
         - name: OLLAMA_HOST
           value: "http://ollama.ollama:11434"
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+      volumes:
+      - name: scripts
+        configMap:
+          name: research-scripts
