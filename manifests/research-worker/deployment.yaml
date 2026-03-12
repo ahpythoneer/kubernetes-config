@@ -37,11 +37,6 @@ spec:
             secretKeyRef:
               name: joplin-ai-user
               key: password
-        - name: JOPLIN_AUTH_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: joplin-ai-user
-              key: auth_token
         - name: OLLAMA_HOST
           value: "http://ollama.ollama:11434"
         volumeMounts:
