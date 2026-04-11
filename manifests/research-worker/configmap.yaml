@@ -16,6 +16,8 @@ data:
     JOPLIN_PASSWORD = os.getenv('JOPLIN_USER_PASSWORD')
     OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://ollama.ollama:11434')
     
+    JOPLIN_BASE_URL = os.getenv('JOPLIN_BASE_URL', 'https://joplin.racktocloud.com')
+
     def get_auth_token():
         """Login to Joplin and get auth token"""
         try:
@@ -24,7 +26,8 @@ data:
                 json={
                     'email': JOPLIN_EMAIL,
                     'password': JOPLIN_PASSWORD
-                }
+                },
+                headers={'Origin': JOPLIN_BASE_URL}
             )
             data = response.json()
             if 'auth_token' in data:
