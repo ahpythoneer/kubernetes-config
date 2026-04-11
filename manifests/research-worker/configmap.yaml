@@ -16,22 +16,22 @@ data:
     JOPLIN_PASSWORD = os.getenv('JOPLIN_USER_PASSWORD')
     OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://ollama.ollama:11434')
     
-    JOPLIN_BASE_URL = os.getenv('JOPLIN_BASE_URL', 'https://joplin.racktocloud.com')
+    JOPLIN_HOST_HEADER = os.getenv('JOPLIN_HOST_HEADER', 'joplin.racktocloud.com')
 
     def get_auth_token():
-        """Login to Joplin and get auth token"""
+        """Login to Joplin and get session token"""
         try:
             response = requests.post(
-                f'{JOPLIN_HOST}/api/auth/login',
+                f'{JOPLIN_HOST}/api/sessions',
                 json={
                     'email': JOPLIN_EMAIL,
                     'password': JOPLIN_PASSWORD
                 },
-                headers={'Origin': JOPLIN_BASE_URL}
+                headers={'Host': JOPLIN_HOST_HEADER}
             )
             data = response.json()
-            if 'auth_token' in data:
-                return data['auth_token']
+            if 'id' in data:
+                return data['id']
             else:
                 print(f"Login failed: {data}")
                 return None
