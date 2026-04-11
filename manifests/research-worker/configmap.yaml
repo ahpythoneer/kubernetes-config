@@ -18,16 +18,21 @@ data:
     
     JOPLIN_HOST_HEADER = os.getenv('JOPLIN_HOST_HEADER', 'joplin.racktocloud.com')
 
+    def joplin_session(token=None):
+        """Create a requests session with required Joplin headers"""
+        s = requests.Session()
+        s.headers.update({'Host': JOPLIN_HOST_HEADER})
+        if token:
+            s.headers.update({'Authorization': f'Bearer {token}'})
+        return s
+
     def get_auth_token():
         """Login to Joplin and get session token"""
         try:
-            response = requests.post(
+            s = joplin_session()
+            response = s.post(
                 f'{JOPLIN_HOST}/api/sessions',
-                json={
-                    'email': JOPLIN_EMAIL,
-                    'password': JOPLIN_PASSWORD
-                },
-                headers={'Host': JOPLIN_HOST_HEADER}
+                json={'email': JOPLIN_EMAIL, 'password': JOPLIN_PASSWORD}
             )
             data = response.json()
             if 'id' in data:
@@ -38,27 +43,23 @@ data:
         except Exception as e:
             print(f"Error logging in: {e}")
             return None
-    
+
     def get_joplin_notes(token):
         """Get all notes from Joplin"""
         try:
-            headers = {'Authorization': f'Bearer {token}'}
-            response = requests.get(
-                f'{JOPLIN_HOST}/api/notes',
-                headers=headers
-            )
+            s = joplin_session(token)
+            response = s.get(f'{JOPLIN_HOST}/api/notes')
             return response.json().get('items', [])
         except Exception as e:
             print(f"Error getting notes: {e}")
             return []
-    
+
     def update_joplin_note(token, note_id, content):
         """Update note in Joplin"""
         try:
-            headers = {'Authorization': f'Bearer {token}'}
-            response = requests.put(
+            s = joplin_session(token)
+            response = s.put(
                 f'{JOPLIN_HOST}/api/notes/{note_id}',
-                headers=headers,
                 json={'body': content}
             )
             return response.json()
