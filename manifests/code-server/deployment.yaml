@@ -1,4 +1,10 @@
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: code-server
+  namespace: code-server
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: code-server-storage
