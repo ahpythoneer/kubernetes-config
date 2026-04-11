@@ -17,14 +17,9 @@ spec:
     requests:
       storage: 20Gi
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: code-server-secrets
-  namespace: code-server
-type: Opaque
-stringData:
-  password: H0m3L@b!25!!
+# Secret removed — code-server reads its password from Vault agent at
+# /vault/secrets/code-server (secret/code-server in kv-v2). Managed via
+# vault.hashicorp.com/agent-inject annotations on the Deployment below.
 ---
 apiVersion: v1
 kind: Service

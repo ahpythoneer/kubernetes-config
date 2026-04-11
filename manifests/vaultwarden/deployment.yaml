@@ -17,14 +17,10 @@ spec:
     requests:
       storage: 10Gi
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: vaultwarden-secrets
-  namespace: vaultwarden
-type: Opaque
-stringData:
-  admin-token: H0m3L@b!25!!
+# Secret removed — Vaultwarden ADMIN_TOKEN is sourced from Vault at
+# secret/vaultwarden/config via the vault.hashicorp.com/agent-inject annotations
+# on the Deployment below. This k8s Secret was orphaned (never consumed by the
+# Deployment) and held the plaintext value.
 ---
 apiVersion: v1
 kind: Service

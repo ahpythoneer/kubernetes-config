@@ -17,14 +17,9 @@ spec:
     requests:
       storage: 5Gi
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: grafana-secrets
-  namespace: grafana
-type: Opaque
-stringData:
-  admin-password: H0m3L@b!25!!
+# Secret removed — Grafana admin password is stored in Vault at
+# secret/grafana/admin and rotated via `grafana-cli admin reset-admin-password`.
+# The hash is persisted in Grafana's own SQLite; this manifest no longer holds it.
 ---
 apiVersion: v1
 kind: Service

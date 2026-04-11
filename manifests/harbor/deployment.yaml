@@ -11,14 +11,11 @@ spec:
     requests:
       storage: 100Gi
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: harbor-admin-secret
-  namespace: harbor
-type: Opaque
-stringData:
-  admin-password: Harbor@Admin123!SecurePass
+# Secret removed — Harbor admin password was NEVER consumed from this manifest
+# (Harbor reads HARBOR_ADMIN_PASSWORD from harbor-core k8s Secret created by the
+# Harbor Helm chart on first deploy, and stores it in harbor-db thereafter).
+# This inline Secret was a stray — removing it to eliminate plaintext exposure.
+# Harbor admin rotation is a separate follow-up task (see incidents log).
 ---
 apiVersion: v1
 kind: Service
