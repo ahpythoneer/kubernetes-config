@@ -1,0 +1,32 @@
+# Gitleaks configuration for kubernetes-config
+# Extends the default ruleset with project-specific allowlists.
+# Docs: https://github.com/gitleaks/gitleaks
+
+title = "kubernetes-config gitleaks config"
+
+[extend]
+# Inherit gitleaks' default rules (catches AWS keys, GitHub tokens, private keys,
+# generic high-entropy strings, etc.)
+useDefault = true
+
+[allowlist]
+description = "Project-specific allowlist"
+
+# Ignore files that legitimately contain example/test material
+paths = [
+  '''^docs/learning-journey\.md$''',
+  '''^docs/troubleshooting/.*\.md$''',
+  '''^docs/incidents/.*\.md$''',
+  '''^_bmad-output/.*\.md$''',
+]
+
+# Regexes that are known-safe in this repo:
+regexes = [
+  # Kubernetes secretKeyRef references — these are pointers, not values
+  '''secretKeyRef:\s*$''',
+  '''name:\s*[a-z0-9-]+\s*$''',
+  # Helm chart values that reference vault-agent templates
+  '''vault\.hashicorp\.com/agent-inject''',
+  # Python function calls / method references named *_token, *_secret
+  '''get_auth_token\(\)''',
+]

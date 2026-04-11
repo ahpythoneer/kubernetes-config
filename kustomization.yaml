@@ -46,8 +46,9 @@ resources:
   # Joplin Server
   - manifests/joplin/namespace.yaml
   - manifests/joplin/rbac.yaml
-  - manifests/joplin/secret.yaml
-  - manifests/joplin/certificate.yaml  # ← ADD THIS
+  # joplin/secret.yaml removed — plaintext postgres password moved to runtime-only k8s Secret
+  # (managed out-of-band, rotated, sourced from Vault in future refactor)
+  - manifests/joplin/certificate.yaml
   - manifests/joplin/deployment.yaml
   - manifests/joplin/service.yaml
   - manifests/joplin/ingress.yaml
