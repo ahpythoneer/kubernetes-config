@@ -1,4 +1,10 @@
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vaultwarden
+  namespace: vaultwarden
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: vaultwarden-storage
