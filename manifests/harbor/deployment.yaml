@@ -1,88 +1,22 @@
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: harbor-storage
-  namespace: harbor
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: nfs-storage
-  resources:
-    requests:
-      storage: 100Gi
+# Harbor — Deployment Placeholder
+#
+# STATUS: Harbor was previously deployed via a failed Helm install with a non-functional
+# kustomize stub in this file. Both were cleaned up during security remediation
+# (2026-04-11, incident docs/incidents/2026-04-11-plaintext-credentials-remediation.md).
+#
+# PLAN: Harbor will be redeployed as a proper ArgoCD-managed Helm Application
+# pointing at the upstream Harbor Helm chart (https://helm.goharbor.io) with:
+#   - Admin password sourced from Vault at secret/harbor/admin
+#   - Database password sourced from Vault at secret/harbor/database
+#   - Pinned chart version per MVP-CRIT-03
+#   - Full component deployment (core, database, jobservice, nginx, portal,
+#     redis, registry, trivy) — not the single-container stub that was here before
+#
+# This file intentionally contains ONLY the namespace definition so ArgoCD
+# preserves the namespace while Harbor is being properly reinstalled.
+# The Harbor ArgoCD Application will be added to argocd-apps/ when ready.
 ---
-# Secret removed — Harbor admin password was NEVER consumed from this manifest
-# (Harbor reads HARBOR_ADMIN_PASSWORD from harbor-core k8s Secret created by the
-# Harbor Helm chart on first deploy, and stores it in harbor-db thereafter).
-# This inline Secret was a stray — removing it to eliminate plaintext exposure.
-# Harbor admin rotation is a separate follow-up task (see incidents log).
----
 apiVersion: v1
-kind: Service
+kind: Namespace
 metadata:
   name: harbor
-  namespace: harbor
-spec:
-  type: LoadBalancer
-  loadBalancerIP: 10.0.0.151
-  ports:
-  - port: 80
-    targetPort: 80
-    name: http
-  - port: 443
-    targetPort: 443
-    name: https
-  selector:
-    app: harbor
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: harbor
-  namespace: harbor
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: harbor
-  template:
-    metadata:
-      labels:
-        app: harbor
-    spec:
-      securityContext:
-        fsGroup: 0
-      containers:
-      - name: harbor
-        image: goharbor/harbor-core:v2.14.2
-        ports:
-        - containerPort: 80
-        - containerPort: 443
-        env:
-        - name: HARBOR_ADMIN_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: harbor-admin-secret
-              key: admin-password
-        - name: HARBOR_DATABASE_HOST
-          value: postgresql.databases.svc.cluster.local
-        - name: HARBOR_DATABASE_PASSWORD
-          value: C0nn3ct@2025
-        - name: HARBOR_DATABASE_DB_NAME
-          value: harbor
-        - name: CORE_URL
-          value: http://harbor:80
-        volumeMounts:
-        - name: harbor-data
-          mountPath: /data
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "500m"
-          limits:
-            memory: "1Gi"
-            cpu: "1000m"
-      volumes:
-      - name: harbor-data
-        persistentVolumeClaim:
-          claimName: harbor-storage
