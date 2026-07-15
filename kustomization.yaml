@@ -40,6 +40,10 @@ resources:
   - manifests/harbor/namespace.yaml
   - manifests/harbor/application.yaml
 
+  # Cloudflare Tunnel
+  - manifests/cloudflared/namespace.yaml
+  - manifests/cloudflared/deployment.yaml
+
   # Ollama GPU
   - manifests/ollama/namespace.yaml
   - manifests/ollama/rbac.yaml
