@@ -33,10 +33,7 @@ spec:
         image: joplin/server:latest
         imagePullPolicy: IfNotPresent
         command: ["/bin/sh", "-c"]
-        args:
-        - |
-          source /vault/secrets/db
-          exec tini -- yarn start-prod
+        args: [". /vault/secrets/db && exec tini -- yarn start-prod"]
         ports:
         - name: http
           containerPort: 22300
