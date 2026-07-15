@@ -13,24 +13,31 @@ resources:
   # Heimdall
   - manifests/heimdall/namespace.yaml
   - manifests/heimdall/deployment.yaml
-  
+  - manifests/heimdall/ingress.yaml
+
   # Vaultwarden
   - manifests/vaultwarden/namespace.yaml
   - manifests/vaultwarden/deployment.yaml
-  
+
   # Code Server
   - manifests/code-server/namespace.yaml
   - manifests/code-server/deployment.yaml
-  
+  - manifests/code-server/ingress.yaml
+
   # Grafana
   - manifests/grafana/namespace.yaml
   - manifests/grafana/deployment.yaml
-  
+  - manifests/grafana/ingress.yaml
+
   # Prometheus
   - manifests/prometheus/namespace.yaml
   - manifests/prometheus/configmap.yaml
   - manifests/prometheus/rbac.yaml  #
   - manifests/prometheus/deployment.yaml
+  - manifests/prometheus/ingress.yaml
+
+  # ArgoCD Ingress
+  - manifests/argocd/ingress.yaml
 
   # cert-manager
   - manifests/cert-manager/namespace.yaml

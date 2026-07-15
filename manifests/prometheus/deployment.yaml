@@ -6,8 +6,7 @@ metadata:
   labels:
     app: prometheus
 spec:
-  type: LoadBalancer
-  loadBalancerIP: 10.0.0.160
+  type: ClusterIP
   ports:
   - port: 80
     targetPort: 9090
