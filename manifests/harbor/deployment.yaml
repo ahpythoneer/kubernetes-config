@@ -1,22 +1,3 @@
-# Harbor — Deployment Placeholder
-#
-# STATUS: Harbor was previously deployed via a failed Helm install with a non-functional
-# kustomize stub in this file. Both were cleaned up during security remediation
-# (2026-04-11, incident docs/incidents/2026-04-11-plaintext-credentials-remediation.md).
-#
-# PLAN: Harbor will be redeployed as a proper ArgoCD-managed Helm Application
-# pointing at the upstream Harbor Helm chart (https://helm.goharbor.io) with:
-#   - Admin password sourced from Vault at secret/harbor/admin
-#   - Database password sourced from Vault at secret/harbor/database
-#   - Pinned chart version per MVP-CRIT-03
-#   - Full component deployment (core, database, jobservice, nginx, portal,
-#     redis, registry, trivy) — not the single-container stub that was here before
-#
-# This file intentionally contains ONLY the namespace definition so ArgoCD
-# preserves the namespace while Harbor is being properly reinstalled.
-# The Harbor ArgoCD Application will be added to argocd-apps/ when ready.
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: harbor
+# Harbor — managed by ArgoCD Helm Application (see application.yaml)
+# Admin password: Vault secret/harbor (out-of-band k8s Secret harbor-admin-secret)
+# Core secret key: Vault secret/harbor/core (out-of-band k8s Secret harbor-core-secret)

@@ -36,6 +36,10 @@ resources:
   - manifests/vault/namespace.yaml
   - manifests/vault/application.yaml
 
+  # Harbor Container Registry
+  - manifests/harbor/namespace.yaml
+  - manifests/harbor/application.yaml
+
   # Ollama GPU
   - manifests/ollama/namespace.yaml
   - manifests/ollama/rbac.yaml
