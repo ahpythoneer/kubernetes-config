@@ -53,6 +53,14 @@ resources:
   - manifests/harbor/namespace.yaml
   - manifests/harbor/application.yaml
 
+  # Loki Log Aggregation
+  - manifests/loki/namespace.yaml
+  - manifests/loki/application.yaml
+
+  # Alloy Log Collector
+  - manifests/alloy/namespace.yaml
+  - manifests/alloy/application.yaml
+
   # Cloudflare Tunnel
   - manifests/cloudflared/namespace.yaml
   - manifests/cloudflared/deployment.yaml
