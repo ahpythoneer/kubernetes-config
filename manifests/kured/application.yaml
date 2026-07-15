@@ -13,15 +13,12 @@ spec:
       releaseName: kured
       values: |
         configuration:
-          rebootSentinel: /var/run/reboot-required
           period: 1h
           rebootDays: [su]
-          startTime: 3:00
-          endTime: 6:00
+          startTime: "3:00"
+          endTime: "6:00"
           timeZone: America/Chicago
           concurrency: 1
-          drainTimeout: 300
-          prometheusUrl: http://alertmanager.alertmanager.svc.cluster.local:9093
         tolerations:
         - key: node-role.kubernetes.io/control-plane
           effect: NoSchedule
