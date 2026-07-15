@@ -1,0 +1,96 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: harbor
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://helm.goharbor.io
+    chart: harbor
+    targetRevision: "1.16.2"
+    helm:
+      releaseName: harbor
+      values: |
+        expose:
+          type: ingress
+          tls:
+            enabled: true
+            certSource: secret
+            secret:
+              secretName: harbor-tls
+          ingress:
+            hosts:
+              core: harbor.racktocloud.com
+            className: nginx
+            annotations:
+              cert-manager.io/cluster-issuer: letsencrypt-prod
+              nginx.ingress.kubernetes.io/ssl-redirect: "true"
+              nginx.ingress.kubernetes.io/proxy-body-size: "0"
+
+        externalURL: https://harbor.racktocloud.com
+
+        persistence:
+          enabled: true
+          resourcePolicy: "keep"
+          persistentVolumeClaim:
+            registry:
+              storageClass: nfs-storage
+              size: 50Gi
+            jobservice:
+              jobLog:
+                storageClass: nfs-storage
+                size: 1Gi
+            database:
+              storageClass: nfs-storage
+              size: 5Gi
+            redis:
+              storageClass: nfs-storage
+              size: 2Gi
+            trivy:
+              storageClass: nfs-storage
+              size: 5Gi
+
+        existingSecretAdminPassword: harbor-admin-secret
+        existingSecretAdminPasswordKey: HARBOR_ADMIN_PASSWORD
+        existingSecretSecretKey: harbor-core-secret
+
+        harborAdminPassword: ""
+
+        database:
+          type: internal
+
+        trivy:
+          enabled: true
+
+        portal:
+          replicas: 1
+        core:
+          replicas: 1
+        jobservice:
+          replicas: 1
+        registry:
+          replicas: 1
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: harbor
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  ignoreDifferences:
+  - group: admissionregistration.k8s.io
+    kind: MutatingWebhookConfiguration
+    jsonPointers:
+    - /webhooks/0/clientConfig/caBundle
