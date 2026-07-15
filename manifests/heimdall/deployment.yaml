@@ -52,6 +52,21 @@ spec:
         vault.hashicorp.com/agent-inject-template-heimdall: '{{- with secret "secret/data/heimdall"
           -}}\nexport ADMIN_PASSWORD="{{ .Data.data.password }}"\n{{- end }}'
     spec:
+      initContainers:
+      - name: fix-nfs-perms
+        image: busybox:latest
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          mkdir -p /config/www/avatars /config/www/backgrounds /config/www/icons /config/www/logs /config/www/SupportedApps /config/log/heimdall /config/nginx/site-confs /config/keys /config/php
+          chmod 775 /config/www /config/nginx
+          chmod 777 /config
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+        volumeMounts:
+        - name: config
+          mountPath: /config
       containers:
       - name: heimdall
         image: linuxserver/heimdall:latest
