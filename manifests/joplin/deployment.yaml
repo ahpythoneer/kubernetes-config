@@ -17,12 +17,26 @@ spec:
       annotations:
         vault.hashicorp.com/agent-inject: "true"
         vault.hashicorp.com/role: "joplin"
+        vault.hashicorp.com/agent-inject-secret-db: "secret/data/joplin/database"
+        vault.hashicorp.com/agent-inject-template-db: |
+          {{- with secret "secret/data/joplin/database" -}}
+          export POSTGRES_HOST="{{ .Data.data.postgres_host }}"
+          export POSTGRES_PORT="{{ .Data.data.postgres_port }}"
+          export POSTGRES_USER="{{ .Data.data.postgres_user }}"
+          export POSTGRES_PASSWORD="{{ .Data.data.postgres_password }}"
+          export POSTGRES_DATABASE="{{ .Data.data.database_name }}"
+          {{- end }}
     spec:
       serviceAccountName: joplin
       containers:
       - name: joplin-server
         image: joplin/server:latest
         imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          source /vault/secrets/db
+          exec tini -- yarn start-prod
         ports:
         - name: http
           containerPort: 22300
@@ -34,44 +48,6 @@ spec:
           value: "pg"
         - name: TRUSTED_DOMAINS
           value: "localhost,127.0.0.1,joplin.racktocloud.com,joplin-server,joplin-server.joplin,joplin-server.joplin.svc.cluster.local,10.0.0.0/8"
-        - name: POSTGRES_HOST
-          valueFrom:
-            secretKeyRef:
-              name: joplin-db
-              key: postgres_host
-        - name: APP_BASE_URL
-          value: "https://joplin.racktocloud.com"
-        - name: DB_CLIENT
-          value: "pg"
-        - name: TRUSTED_DOMAINS
-          value: "localhost,127.0.0.1,joplin-server,joplin-server.joplin,joplin-server.joplin.svc.cluster.local,10.0.0.0/8"
-        - name: POSTGRES_HOST
-          valueFrom:
-            secretKeyRef:
-              name: joplin-db
-              key: postgres_host
-        - name: POSTGRES_PORT
-          valueFrom:
-            secretKeyRef:
-              name: joplin-db
-              key: postgres_port
-        - name: POSTGRES_USER
-          valueFrom:
-            secretKeyRef:
-              name: joplin-db
-              key: postgres_user
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: joplin-db
-              key: postgres_password
-        - name: POSTGRES_DATABASE
-          valueFrom:
-            secretKeyRef:
-              name: joplin-db
-              key: postgres_database
-        # NO HEALTH CHECKS - Joplin works fine!
-        # Remove the CORS issues by not checking at all
         resources:
           requests:
             memory: "512Mi"
