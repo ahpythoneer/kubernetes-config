@@ -58,3 +58,23 @@ data:
         annotations:
           summary: "ArgoCD application sync failed"
           description: "Application sync failed in ArgoCD"
+
+      # Node Down
+      - alert: NodeDown
+        expr: up{job="node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node {{ $labels.instance }} is down"
+          description: "Node exporter on {{ $labels.instance }} has been unreachable for 2 minutes."
+
+      # Pod CrashLooping
+      - alert: PodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total[1h]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
+          description: "Container {{ $labels.container }} has restarted more than 3 times in the last hour."

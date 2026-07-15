@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: alertmanager
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+
+    route:
+      receiver: telegram
+      group_by: ['alertname', 'namespace']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+
+    receivers:
+    - name: telegram
+      telegram_configs:
+      - bot_token_file: /etc/alertmanager/secrets/bot-token
+        chat_id: 1075093819
+        parse_mode: HTML
+        message: |
+          {{ range .Alerts }}
+          <b>{{ .Status | toUpper }}</b>: {{ .Labels.alertname }}
+          <b>Namespace:</b> {{ .Labels.namespace }}
+          <b>Severity:</b> {{ .Labels.severity }}
+          <b>Summary:</b> {{ .Annotations.summary }}
+          <b>Description:</b> {{ .Annotations.description }}
+          {{ end }}
