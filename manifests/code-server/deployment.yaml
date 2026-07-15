@@ -27,8 +27,7 @@ metadata:
   name: code-server
   namespace: code-server
 spec:
-  type: LoadBalancer
-  loadBalancerIP: 10.0.0.157
+  type: ClusterIP
   ports:
   - port: 80
     targetPort: 8080
