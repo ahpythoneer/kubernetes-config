@@ -44,6 +44,10 @@ resources:
   - manifests/cloudflared/namespace.yaml
   - manifests/cloudflared/deployment.yaml
 
+  # UniFi Network Server
+  - manifests/unifi/namespace.yaml
+  - manifests/unifi/deployment.yaml
+
   # Ollama GPU
   - manifests/ollama/namespace.yaml
   - manifests/ollama/rbac.yaml
