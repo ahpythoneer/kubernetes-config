@@ -53,6 +53,11 @@ resources:
   - manifests/harbor/namespace.yaml
   - manifests/harbor/application.yaml
 
+  # AlertManager
+  - manifests/alertmanager/namespace.yaml
+  - manifests/alertmanager/configmap.yaml
+  - manifests/alertmanager/deployment.yaml
+
   # Loki Log Aggregation
   - manifests/loki/namespace.yaml
   - manifests/loki/application.yaml
