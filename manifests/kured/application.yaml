@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kured
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://kubereboot.github.io/charts
+    chart: kured
+    targetRevision: "5.6.0"
+    helm:
+      releaseName: kured
+      values: |
+        configuration:
+          rebootSentinel: /var/run/reboot-required
+          period: 1h
+          rebootDays: [su]
+          startTime: 3:00
+          endTime: 6:00
+          timeZone: America/Chicago
+          concurrency: 1
+          drainTimeout: 300
+          prometheusUrl: http://alertmanager.alertmanager.svc.cluster.local:9093
+        tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kured
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

@@ -53,6 +53,10 @@ resources:
   - manifests/harbor/namespace.yaml
   - manifests/harbor/application.yaml
 
+  # Kured - OS Reboot Daemon
+  - manifests/kured/namespace.yaml
+  - manifests/kured/application.yaml
+
   # External DNS
   - manifests/external-dns/namespace.yaml
   - manifests/external-dns/application.yaml
