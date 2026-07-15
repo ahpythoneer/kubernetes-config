@@ -32,6 +32,19 @@ resources:
   - manifests/prometheus/rbac.yaml  #
   - manifests/prometheus/deployment.yaml
 
+  # cert-manager
+  - manifests/cert-manager/namespace.yaml
+  - manifests/cert-manager/application.yaml
+
+  # Ingress NGINX
+  - manifests/ingress-nginx/namespace.yaml
+  - manifests/ingress-nginx/application.yaml
+
+  # MetalLB
+  - manifests/metallb/namespace.yaml
+  - manifests/metallb/application.yaml
+  - manifests/metallb/config.yaml
+
   # Vault Secret Manager
   - manifests/vault/namespace.yaml
   - manifests/vault/application.yaml
