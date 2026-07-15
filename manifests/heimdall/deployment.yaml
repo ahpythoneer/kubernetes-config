@@ -59,8 +59,7 @@ spec:
         args:
         - |
           mkdir -p /config/www/avatars /config/www/backgrounds /config/www/icons /config/www/logs /config/www/SupportedApps /config/log/heimdall /config/nginx/site-confs /config/keys /config/php
-          chmod 775 /config/www /config/nginx
-          chmod 777 /config
+          chmod -R 777 /config
         securityContext:
           runAsUser: 1000
           runAsGroup: 1000
