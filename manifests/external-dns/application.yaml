@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-dns
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes-sigs.github.io/external-dns
+    chart: external-dns
+    targetRevision: "1.15.1"
+    helm:
+      releaseName: external-dns
+      values: |
+        provider:
+          name: cloudflare
+        env:
+        - name: CF_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: cloudflare-api-token
+              key: api-token
+        extraArgs:
+        - --cloudflare-proxied
+        - --cloudflare-dns-records-per-page=1000
+        domainFilters:
+        - racktocloud.com
+        policy: upsert-only
+        sources:
+        - ingress
+        - service
+        txtOwnerId: homelab-k8s
+        txtPrefix: _externaldns.
+        serviceAccount:
+          create: true
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 50m
+          limits:
+            memory: 256Mi
+            cpu: 200m
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-dns
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
