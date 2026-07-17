@@ -21,10 +21,13 @@ spec:
               name: cloudflare-api-token
               key: api-token
         extraArgs:
-        - --cloudflare-proxied
         - --cloudflare-dns-records-per-page=1000
         domainFilters:
         - racktocloud.com
+        excludeDomains:
+        - harbor.racktocloud.com
+        - joplin.racktocloud.com
+        - k8vault.racktocloud.com
         policy: upsert-only
         sources:
         - ingress
