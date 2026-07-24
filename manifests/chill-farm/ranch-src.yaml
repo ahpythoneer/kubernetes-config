@@ -48,7 +48,7 @@ data:
         });
         if (!res.ok) return null;
         const j = await res.json();
-        let t = (j.response || '').trim().replace(/^["'\s]+|["'\s]+$/g, '').split('\n')[0].trim();
+        let t = (j.response || '').replace(/["]/g, '').trim().replace(/^['\s]+|['\s]+$/g, '').split('\n')[0].trim();
         if (t.length > 140) t = t.slice(0, 138) + '…';
         return t || null;
       } catch (e) { return null; } finally { clearTimeout(to); aiInFlight--; }
