@@ -322,6 +322,19 @@ data:
       .chill-modal h2 { font-size: clamp(1.5rem,5vw,2.1rem); text-transform: uppercase; margin: .5rem 0 .2rem; letter-spacing: .01em; }
       .chill-modal p { color: var(--ink-soft); font-size: .98rem; margin: .6rem 0 0; }
 
+      /* ---------- scroll cop: fires when you scroll too fast ---------- */
+      .chill-police { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 1.2rem;
+        pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .3s var(--ease-chill), visibility .3s; }
+      .chill-police.show { opacity: 1; visibility: visible; }
+      .chill-police__card { background: var(--saddle-dk); color: #ffe6ad; border: 3px dashed var(--wheat);
+        border-radius: 18px; padding: 1.4rem 1.9rem; max-width: min(90vw, 440px); text-align: center;
+        box-shadow: 0 24px 60px rgba(0,0,0,.5); transform: scale(1.5) rotate(-7deg); transition: transform .4s var(--ease-chill); }
+      .chill-police.show .chill-police__card { transform: scale(1) rotate(-3deg); }
+      .chill-police .cp-emoji { font-size: 2.8rem; line-height: 1; }
+      .chill-police h3 { font-family: var(--display); text-transform: uppercase; font-size: 1.5rem; margin: .35rem 0 .2rem;
+        letter-spacing: .02em; color: #ffe6ad; }
+      .chill-police p { font-family: var(--mono); font-size: .84rem; letter-spacing: .04em; color: #e9cf9f; margin: 0; }
+
       /* MAXIMUM CHILL mode slows the whole ranch down */
       body.maxchill * { animation-duration: 3s !important; transition-duration: 1.4s !important; }
       body.maxchill { filter: saturate(1.15) brightness(1.02); }
@@ -531,6 +544,15 @@ data:
       </div>
     </div>
 
+    <!-- scroll cop -->
+    <div class="chill-police" id="chillPolice" aria-hidden="true">
+      <div class="chill-police__card">
+        <div class="cp-emoji" id="cpEmoji">🐢</div>
+        <h3 id="cpTitle">Whoa there, partner</h3>
+        <p id="cpMsg">This is a chill farm — ease off the throttle.</p>
+      </div>
+    </div>
+
     <div class="toast" id="toast"></div>
     <div class="cno" id="cno" title="The Chief Napping Officer">🐈 <span class="zzz">💤</span></div>
 
@@ -694,6 +716,41 @@ data:
       modal.addEventListener("click", function(e){ if (e.target === modal || e.target.hasAttribute("data-close")) closeModal(); });
       addEventListener("keydown", function(e){ if (e.key === "Escape" && modal.classList.contains("open")) closeModal(); });
 
+      /* ---------- scroll cop: catches fast scrollers being un-chill ---------- */
+      var CP = document.getElementById("chillPolice"),
+          cpEmoji = document.getElementById("cpEmoji"),
+          cpTitle = document.getElementById("cpTitle"),
+          cpMsg = document.getElementById("cpMsg");
+      var CP_MSGS = [
+        { e:"🐢", t:"Whoa there, partner", m:"This is a chill farm — ease off the throttle." },
+        { e:"😎", t:"Too much hustle", m:"You're scrolling like it's a Monday. Breathe." },
+        { e:"🌵", t:"Easy, cowboy", m:"The backlog isn't going anywhere. Neither should you." },
+        { e:"🧘", t:"Please relax", m:"Detected: excessive productivity energy. Slow it down." },
+        { e:"🍹", t:"Sip, don't gulp", m:"Enjoy the ranch at ranch speed." }
+      ];
+      var cpCount = 0, cpCool = false, cpHideT, cpSamples = [];
+      function now(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+      function cpFire(){
+        if (cpCool) return;
+        var m = (cpCount >= CP_MSGS.length + 2)
+          ? { e:"😤", t:"Okay, showoff", m:"You're speed-running our whole vibe on purpose now." }
+          : CP_MSGS[cpCount % CP_MSGS.length];
+        cpCount++;
+        cpEmoji.textContent = m.e; cpTitle.textContent = m.t; cpMsg.textContent = m.m;
+        CP.classList.add("show");
+        clearTimeout(cpHideT); cpHideT = setTimeout(function(){ CP.classList.remove("show"); }, 2200);
+        cpCool = true; setTimeout(function(){ cpCool = false; }, 9000);
+      }
+      addEventListener("scroll", function(){
+        var t = now(), y = window.scrollY || document.documentElement.scrollTop || 0;
+        cpSamples.push([t, y]);
+        while (cpSamples.length > 1 && t - cpSamples[0][0] > 450) cpSamples.shift();
+        if (cpSamples.length > 1){
+          var span = t - cpSamples[0][0], dist = Math.abs(y - cpSamples[0][1]);
+          if (span > 0 && dist > 500 && dist / span > 2.3) cpFire();   // ~2300+ px/sec = too eager
+        }
+      }, { passive: true });
+
       /* 6. console note for the curious */
       try {
         console.log("%c🤠 Welcome to Chill Farm","font:700 22px Rockwell,serif;color:#c15a34;");
@@ -823,6 +880,17 @@ data:
       .chill-modal .cm-emoji { font-size:3.4rem; animation:breathe 5s ease-in-out infinite; }
       .chill-modal h2 { font-size:clamp(1.5rem,5vw,2.1rem); text-transform:uppercase; margin:.5rem 0 .2rem; }
       .chill-modal p { color:var(--ink-soft); font-size:.98rem; margin:.6rem 0 0; }
+
+      .chill-police { position:fixed; inset:0; z-index:90; display:grid; place-items:center; padding:1.2rem;
+        pointer-events:none; opacity:0; visibility:hidden; transition:opacity .3s var(--ease-chill), visibility .3s; }
+      .chill-police.show { opacity:1; visibility:visible; }
+      .chill-police__card { background:var(--saddle-dk); color:#ffe6ad; border:3px dashed var(--wheat); border-radius:18px;
+        padding:1.4rem 1.9rem; max-width:min(90vw,440px); text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.5);
+        transform:scale(1.5) rotate(-7deg); transition:transform .4s var(--ease-chill); }
+      .chill-police.show .chill-police__card { transform:scale(1) rotate(-3deg); }
+      .chill-police .cp-emoji { font-size:2.8rem; line-height:1; }
+      .chill-police h3 { font-family:var(--display); text-transform:uppercase; font-size:1.5rem; margin:.35rem 0 .2rem; letter-spacing:.02em; color:#ffe6ad; }
+      .chill-police p { font-family:var(--mono); font-size:.84rem; letter-spacing:.04em; color:#e9cf9f; margin:0; }
 
       @media (prefers-reduced-motion: reduce){
         *,*::before,*::after { animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
@@ -955,6 +1023,14 @@ data:
       </div>
     </footer>
 
+    <div class="chill-police" id="chillPolice" aria-hidden="true">
+      <div class="chill-police__card">
+        <div class="cp-emoji" id="cpEmoji">🐢</div>
+        <h3 id="cpTitle">Whoa there, partner</h3>
+        <p id="cpMsg">Careers are a marathon, not a sprint. Actually — neither. Slow down.</p>
+      </div>
+    </div>
+
     <div class="chill-modal" id="chillModal" role="dialog" aria-modal="true" aria-labelledby="cmTitle">
       <div class="chill-modal__card">
         <div class="cm-emoji">🌴</div>
@@ -984,6 +1060,39 @@ data:
       document.querySelectorAll(".js-apply").forEach(function(el){ el.addEventListener("click", function(e){ e.preventDefault(); openModal(); }); });
       modal.addEventListener("click", function(e){ if (e.target === modal || e.target.hasAttribute("data-close")) closeModal(); });
       addEventListener("keydown", function(e){ if (e.key === "Escape" && modal.classList.contains("open")) closeModal(); });
+
+      /* scroll cop */
+      var CP = document.getElementById("chillPolice"),
+          cpEmoji = document.getElementById("cpEmoji"), cpTitle = document.getElementById("cpTitle"), cpMsg = document.getElementById("cpMsg");
+      var CP_MSGS = [
+        { e:"🐢", t:"Whoa there, partner", m:"This is a chill farm — ease off the throttle." },
+        { e:"😎", t:"Too much hustle", m:"You're scrolling like it's a Monday. Breathe." },
+        { e:"🌵", t:"Easy, cowboy", m:"These jobs aren't going anywhere. Neither should you." },
+        { e:"🧘", t:"Please relax", m:"Detected: excessive productivity energy. Slow it down." },
+        { e:"🍹", t:"Sip, don't gulp", m:"Read the listings at ranch speed." }
+      ];
+      var cpCount = 0, cpCool = false, cpHideT, cpSamples = [];
+      function pnow(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+      function cpFire(){
+        if (cpCool) return;
+        var m = (cpCount >= CP_MSGS.length + 2)
+          ? { e:"😤", t:"Okay, showoff", m:"You're speed-running our whole vibe on purpose now." }
+          : CP_MSGS[cpCount % CP_MSGS.length];
+        cpCount++;
+        cpEmoji.textContent = m.e; cpTitle.textContent = m.t; cpMsg.textContent = m.m;
+        CP.classList.add("show");
+        clearTimeout(cpHideT); cpHideT = setTimeout(function(){ CP.classList.remove("show"); }, 2200);
+        cpCool = true; setTimeout(function(){ cpCool = false; }, 9000);
+      }
+      addEventListener("scroll", function(){
+        var t = pnow(), y = window.scrollY || document.documentElement.scrollTop || 0;
+        cpSamples.push([t, y]);
+        while (cpSamples.length > 1 && t - cpSamples[0][0] > 450) cpSamples.shift();
+        if (cpSamples.length > 1){
+          var span = t - cpSamples[0][0], dist = Math.abs(y - cpSamples[0][1]);
+          if (span > 0 && dist > 500 && dist / span > 2.3) cpFire();
+        }
+      }, { passive: true });
 
       try { console.log("%c🤠 Chill Farm careers — you're already overqualified.","font:13px monospace;color:#7a4a26;"); } catch(_){}
     })();
