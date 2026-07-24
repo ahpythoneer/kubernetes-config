@@ -1376,6 +1376,12 @@ data:
         box-shadow:0 10px 26px rgba(0,0,0,.45);animation:mb .5s var(--ease);}
       .mbanner[hidden]{display:none;}
       @keyframes mb{from{opacity:0;transform:translate(-50%,-8px);}to{opacity:1;transform:translate(-50%,0);}}
+      .midbanner{position:fixed;top:46%;left:50%;transform:translate(-50%,-50%);z-index:9;background:rgba(20,15,40,.85);
+        color:#fff6c8;border:2px solid var(--wheat);border-radius:16px;padding:.8rem 1.4rem;font-family:var(--display);
+        text-transform:uppercase;letter-spacing:.04em;font-size:clamp(1rem,3.5vw,1.4rem);box-shadow:0 14px 40px rgba(0,0,0,.5);
+        backdrop-filter:blur(4px);text-align:center;pointer-events:none;animation:midpop .6s var(--ease);}
+      .midbanner[hidden]{display:none;}
+      @keyframes midpop{from{opacity:0;transform:translate(-50%,-50%) scale(.8);}to{opacity:1;transform:translate(-50%,-50%) scale(1);}}
     </style>
 
     <canvas id="c"></canvas>
@@ -1408,6 +1414,7 @@ data:
     </div>
 
     <div class="mbanner" id="mbanner" hidden>📋 <b id="mtopic"></b></div>
+    <div class="midbanner" id="midbanner" hidden>🌙 Meadow Midnight — make a wish ✨</div>
 
     <div class="askbar" id="askbar" hidden>
       <span id="askLabel">Ask</span>
@@ -1436,6 +1443,7 @@ data:
       var askTarget = null;            // exec id currently being asked
       var pointer = { x: W/2, y: H/2, active:false };
       var meadowHour = 13;                   // shared meadow time-of-day (0-24), from server
+      var rainbowUntil = 0, midnightUntil = 0, midnightSparkles = [], shootStars = [], nextShoot = 0, seasonParticles = [];
       var weather = 0;                       // 0 clear, 1 cloudy, 2 rain (shared, from server)
       var WX = [{e:"☀️",t:"clear"},{e:"⛅",t:"cloudy"},{e:"🌧️",t:"rain"}];
       var wxChip = document.getElementById("wxChip");
@@ -1456,8 +1464,17 @@ data:
         view.s = s;
         view.ox = (cv.width - W*s)/2;
         view.oy = (cv.height - H*s)/2;
-        seedFlies(); seedRain();
+        seedFlies(); seedRain(); seedSeason();
       }
+      function seasonInfo(){
+        var mo = (new Date()).getMonth();          // northern-hemisphere seasons
+        if (mo === 11 || mo <= 1) return { name:"winter", wash:"rgba(200,220,255,.10)", p:"❄" };
+        if (mo <= 4) return { name:"spring", wash:"rgba(255,180,210,.06)", p:"🌸" };
+        if (mo <= 7) return { name:"summer", wash:null, p:"" };
+        return { name:"autumn", wash:"rgba(200,120,40,.07)", p:"🍂" };
+      }
+      function seedSeason(){ seasonParticles = []; if (!seasonInfo().p) return;
+        for (var i=0;i<26;i++) seasonParticles.push({ x:Math.random()*cv.width, y:Math.random()*cv.height, sp:18+Math.random()*30, drift:Math.random()*20-10, ph:Math.random()*6, sz:12+Math.random()*10 }); }
       // 0 = day, 1 = deep night, based on the visitor's real local time
       function nightness(){
         var h = meadowHour;                  // shared across everyone in the meadow
@@ -1539,6 +1556,9 @@ data:
           document.getElementById("mbanner").hidden = false;
         } else if (m.t === "meeting-end"){
           document.getElementById("mbanner").hidden = true;
+        } else if (m.t === "event"){
+          if (m.kind === "rainbow") rainbowUntil = performance.now() + 25000;
+          else if (m.kind === "midnight") triggerMidnight();
         }
       }
       connect();
@@ -1642,6 +1662,9 @@ data:
           ctx.moveTo(gx, gy); ctx.lineTo(gx + view.s*3, gy - view.s*7); ctx.stroke();
         }
 
+        drawSeasonWash();
+        drawRainbow(now);
+
         // campfire (sheep gather round it) — glows brighter after dark
         drawCampfire(now);
 
@@ -1695,6 +1718,8 @@ data:
             ctx.globalAlpha = 1;
           }
         }
+        drawAurora(now);
+        updateShootingStars(now);
 
         // weather: a grey wash when cloudy/rainy, plus falling rain
         if (weather === 1){ ctx.fillStyle = "rgba(70,76,92,.14)"; ctx.fillRect(0,0,cv.width,cv.height); }
@@ -1711,6 +1736,9 @@ data:
             ctx.stroke();
           }
         }
+
+        drawSeasonParticles(now);
+        drawMidnight(now);
 
         // your cursor target marker
         if (pointer.active){
@@ -1741,6 +1769,70 @@ data:
         ctx.fillStyle = "rgba(251,244,226,.96)"; ctx.fill();
         ctx.fillStyle = "#33261a"; ctx.textAlign = "center";
         for (var l2=0;l2<lines.length;l2++) ctx.fillText(lines[l2], cx, by + padY + lh*(l2+1) - u*3.5);
+      }
+
+      // rainbow arc after the rain clears
+      function drawRainbow(now){
+        var life = rainbowUntil - now; if (life <= 0) return;
+        var age = 25000 - life;
+        var alpha = Math.min(1, age/4000) * Math.min(1, life/4000) * 0.55;
+        var cx = cv.width*0.5, cy = cv.height*1.05, R = cv.height*0.95;
+        var cols = ["#e05a5a","#e0964a","#e0cf4a","#5cb85c","#4a8ce0","#6a5ce0","#a24ae0"];
+        var lw = Math.max(3, view.s*5); ctx.lineWidth = lw;
+        for (var i=0;i<cols.length;i++){ ctx.strokeStyle = cols[i]; ctx.globalAlpha = alpha;
+          ctx.beginPath(); ctx.arc(cx, cy, R - i*lw, Math.PI, 2*Math.PI); ctx.stroke(); }
+        ctx.globalAlpha = 1;
+      }
+      // shimmering aurora in the deep-night sky
+      function drawAurora(now){
+        var nf = nightness(); if (nf < 0.7 || reduce) return;
+        var a = (nf-0.7)/0.3, cols = ["rgba(90,255,180,","rgba(120,170,255,","rgba(200,120,255,"];
+        for (var b=0;b<3;b++){
+          ctx.beginPath(); ctx.moveTo(0,0);
+          for (var x=0;x<=cv.width;x+=24){ var y = cv.height*0.10 + Math.sin(x/170 + now/1500 + b*1.3)*cv.height*0.05 + b*cv.height*0.028; ctx.lineTo(x,y); }
+          ctx.lineTo(cv.width,0); ctx.closePath();
+          var g = ctx.createLinearGradient(0,0,0,cv.height*0.32);
+          g.addColorStop(0, cols[b]+(a*0.16)+")"); g.addColorStop(1, cols[b]+"0)");
+          ctx.fillStyle = g; ctx.fill();
+        }
+      }
+      function updateShootingStars(now){
+        if (nightness() > 0.55 && !reduce && now > nextShoot){
+          shootStars.push({ x0:Math.random()*cv.width*0.7, y0:Math.random()*cv.height*0.28, t:now, dur:1400+Math.random()*900 });
+          nextShoot = now + 7000 + Math.random()*16000;
+        }
+        for (var i=shootStars.length-1;i>=0;i--){ var s=shootStars[i]; var p=(now-s.t)/s.dur; if (p>=1){ shootStars.splice(i,1); continue; }
+          var x=s.x0+p*cv.width*0.34, y=s.y0+p*cv.height*0.30, al=(p<0.15?p/0.15:(p>0.7?(1-p)/0.3:1));
+          ctx.globalAlpha=al; ctx.strokeStyle="#fff"; ctx.lineWidth=Math.max(1.5,view.s*1.5);
+          ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-cv.width*0.05, y-cv.height*0.045); ctx.stroke(); ctx.globalAlpha=1;
+        }
+      }
+      function drawSeasonWash(){ var w = seasonInfo().wash; if (w){ ctx.fillStyle=w; ctx.fillRect(0,0,cv.width,cv.height); } }
+      function drawSeasonParticles(now){
+        var s = seasonInfo(); if (!s.p || reduce) return;
+        ctx.textAlign = "center"; ctx.globalAlpha = 0.85;
+        for (var i=0;i<seasonParticles.length;i++){ var p=seasonParticles[i];
+          p.y += p.sp*view.s*0.016; p.x += Math.sin(now/1000 + p.ph)*p.drift*view.s*0.006;
+          if (p.y > cv.height+20){ p.y=-20; p.x=Math.random()*cv.width; }
+          ctx.font = (p.sz*view.s)+"px sans-serif"; ctx.fillText(s.p, p.x, p.y);
+        }
+        ctx.globalAlpha = 1;
+      }
+      function triggerMidnight(){
+        var now = performance.now(); midnightUntil = now + 6500; midnightSparkles = [];
+        for (var i=0;i<52;i++) midnightSparkles.push({ x:Math.random()*cv.width, y:cv.height*(0.5+Math.random()*0.5), delay:Math.random()*1600, sp:40+Math.random()*70, ph:Math.random()*6 });
+        var mb = document.getElementById("midbanner"); if (mb){ mb.hidden=false; clearTimeout(mb._t); mb._t=setTimeout(function(){ mb.hidden=true; }, 6000); }
+      }
+      function drawMidnight(now){
+        if (now >= midnightUntil || reduce) return;
+        var life = midnightUntil - now;
+        for (var i=0;i<midnightSparkles.length;i++){ var s=midnightSparkles[i]; var t=now - (midnightUntil-6500) - s.delay; if (t<0) continue;
+          var y = s.y - (t/1000)*s.sp*view.s; if (y < -10) continue;
+          ctx.globalAlpha = Math.min(1, life/1500) * (0.5+0.5*Math.sin(now/120+s.ph));
+          ctx.fillStyle = "#fff6c8"; ctx.font = (view.s*11)+"px sans-serif"; ctx.textAlign="center";
+          ctx.fillText("✦", s.x + Math.sin(now/300+s.ph)*view.s*6, y);
+        }
+        ctx.globalAlpha = 1;
       }
 
       // campfire the herd gathers around; flames flicker, glow strengthens at night
@@ -1881,6 +1973,19 @@ data:
           o2.start(t); o2.stop(t+0.24);
         }
       }
+      // soft generative lo-fi note that follows the sky (brighter by day, mellower at night)
+      function playNote(){
+        var ac = audio.ac; if (!ac) return; var t = ac.currentTime, nf = nightness();
+        var baseMidi = 50 - nf*5, scale = [0,2,4,7,9,12];
+        var semi = scale[(Math.random()*scale.length)|0] + (Math.random()<0.3 ? 12 : 0);
+        var freq = 440*Math.pow(2, (baseMidi+semi-69)/12);
+        var o = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter();
+        o.type = nf>0.5 ? "sine" : "triangle"; o.frequency.value = freq;
+        lp.type = "lowpass"; lp.frequency.value = 1300 - nf*450;
+        o.connect(lp); lp.connect(g); g.connect(audio.master);
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t+0.4); g.gain.linearRampToValueAtTime(0, t+2.3);
+        o.start(t); o.stop(t+2.4);
+      }
       function ambientTick(now){
         if (!audio.on || !audio.ac) return;
         if (audio.wind){ var tg = weather===2 ? 0.11 : weather===1 ? 0.06 : 0.035; audio.wind.gain.value += (tg - audio.wind.gain.value)*0.02; }
@@ -1889,6 +1994,7 @@ data:
           var night = nightness() > 0.5; chirp(night);
           audio.nextChirp = now + (night ? (900 + Math.random()*1800) : (3000 + Math.random()*5000));
         }
+        if (now > (audio.nextNote || 0)){ playNote(); audio.nextNote = now + 2600 + Math.random()*3200; }
       }
       var sndBtn = document.getElementById("sndBtn");
       sndBtn.addEventListener("click", function(){

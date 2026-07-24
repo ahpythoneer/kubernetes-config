@@ -56,6 +56,7 @@ data:
 
     let weather = 0;                                     // 0 clear, 1 cloudy, 2 rain (shared for everyone)
     let weatherUntil = 0;
+    let lastMh = 12;                                      // previous meadow hour, for detecting midnight
     function stepWeather(now) {
       if (now < weatherUntil) return;
       const r = Math.random();
@@ -392,7 +393,12 @@ data:
       frame++;
       const now = Date.now();
       const step = SPEED * (TICK_MS / 1000);
+      const prevWeather = weather;
       stepWeather(now);
+      if (prevWeather === 2 && weather !== 2) broadcast({ t: 'event', kind: 'rainbow' });   // sun's back out
+      const mh = meadowHour();
+      if (lastMh > 23 && mh < 1) broadcast({ t: 'event', kind: 'midnight' });               // shared meadow midnight
+      lastMh = mh;
 
       for (const c of clients.values()) {
         const idle = now - c.lastInput;
@@ -452,7 +458,7 @@ data:
       const sheep = [];
       for (const c of clients.values()) sheep.push([c.id, Math.round(c.x), Math.round(c.y), c.state, 0]);
       for (let i = 0; i < bots.length; i++) { const b = bots[i]; sheep.push([b.id, Math.round(b.x), Math.round(b.y), b.state, i + 1]); }
-      broadcast({ t: 's', sheep, n: clients.size, chill: meadowChill(), graze: grazedTotal, w: weather, mt: +meadowHour().toFixed(2) });
+      broadcast({ t: 's', sheep, n: clients.size, chill: meadowChill(), graze: grazedTotal, w: weather, mt: +mh.toFixed(2) });
 
       // grass @ 2Hz
       if (frame % 5 === 0) broadcast({ t: 'g', grass: grassStr() });
