@@ -19,7 +19,7 @@ spec:
         app: chill-pasture
       annotations:
         # bump to force a rollout when server.js changes
-        chill-pasture/src-rev: "8"
+        chill-pasture/src-rev: "9"
     spec:
       containers:
       - name: pasture
