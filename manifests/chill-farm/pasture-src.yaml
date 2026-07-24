@@ -137,9 +137,14 @@ data:
       finally { clearTimeout(to); aiInFlight--; }
     }
 
-    function execSay(idx, user) {
+    function execSay(idx, user, targetId) {
       const e = EXECS[idx], b = bots[idx];
       if (!b) return;
+      // if addressing a specific visitor, the exec ambles over to their sheep
+      if (targetId != null) {
+        const v = clients.get(targetId);
+        if (v) { b.tx = clampX(v.x + (Math.random() * 60 - 30)); b.ty = clampY(v.y + 44); b.nextWander = Date.now() + 9000; b.freeMode = 'graze'; }
+      }
       const sys = `You are ${e.name}, ${e.persona}, at Chill Farm — a ranch where everyone relaxes instead of working.${moodClause()} Reply with only ONE short, witty, ultra-chill one-liner under 12 words. No quotes, no preamble, no emojis.`;
       askLLM(sys, user).then((line) => {
         const text = line || e.canned[(Math.random() * e.canned.length) | 0];
@@ -163,7 +168,7 @@ data:
       const people = [...clients.values()];
       if (people.length && Math.random() < 0.35) {
         const v = people[(Math.random() * people.length) | 0];
-        execSay(idx, `Address a visitor named ${v.name}${lookDesc(v)} directly with one warm, playful, chill line. You may gently mention their look.`);
+        execSay(idx, `Address a visitor named ${v.name}${lookDesc(v)} directly with one warm, playful, chill line. You may gently mention their look.`, v.id);
       } else if (lastLine && Math.random() < 0.5) {
         execSay(idx, `Your colleague ${lastLine.name} just said: "${lastLine.text}". Give a chill one-line reply.`);
       } else {
@@ -190,6 +195,10 @@ data:
 
     // ---- HTTP + upgrade ----
     function meadowChill() { let s = 0; for (let i = 0; i < grass.length; i++) s += grass[i]; return Math.round((s / grass.length) * 100); }
+
+    // shared meadow clock: one accelerated day/night cycle everyone sees together (full cycle = 20 min)
+    const MEADOW_CYCLE = 1200;
+    function meadowHour() { const s = (Date.now() / 1000) % MEADOW_CYCLE; return (s / MEADOW_CYCLE) * 24; }
 
     const server = http.createServer((req, res) => {
       const url = req.url || '/';
@@ -290,9 +299,9 @@ data:
           c.name = m.name.slice(0, 18).replace(/[^\w \-!]/g, '') || c.name;
           broadcastRoster();
         }
-        // an exec occasionally greets the newcomer by name (and notices their look)
+        // an exec occasionally greets the newcomer by name (and ambles over)
         if (Date.now() - lastSayAt > 8000 && Math.random() < 0.6) {
-          execSay((Math.random() * EXECS.length) | 0, `A visitor named ${c.name}${lookDesc(c)} just wandered into the meadow. Greet them by name, warm and chill, one short line; you may gently mention their look.`);
+          execSay((Math.random() * EXECS.length) | 0, `A visitor named ${c.name}${lookDesc(c)} just wandered into the meadow. Greet them by name, warm and chill, one short line; you may gently mention their look.`, c.id);
         }
         return;
       }
@@ -397,7 +406,7 @@ data:
       const sheep = [];
       for (const c of clients.values()) sheep.push([c.id, Math.round(c.x), Math.round(c.y), c.state, 0]);
       for (let i = 0; i < bots.length; i++) { const b = bots[i]; sheep.push([b.id, Math.round(b.x), Math.round(b.y), b.state, i + 1]); }
-      broadcast({ t: 's', sheep, n: clients.size, chill: meadowChill(), graze: grazedTotal, w: weather });
+      broadcast({ t: 's', sheep, n: clients.size, chill: meadowChill(), graze: grazedTotal, w: weather, mt: +meadowHour().toFixed(2) });
 
       // grass @ 2Hz
       if (frame % 5 === 0) broadcast({ t: 'g', grass: grassStr() });

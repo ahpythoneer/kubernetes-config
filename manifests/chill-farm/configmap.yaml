@@ -1410,6 +1410,7 @@ data:
       var baas = [];                   // {x,y,t}
       var execBubbles = {};            // id -> {text, t}  (AI banter above the exec sheep)
       var pointer = { x: W/2, y: H/2, active:false };
+      var meadowHour = 13;                   // shared meadow time-of-day (0-24), from server
       var weather = 0;                       // 0 clear, 1 cloudy, 2 rain (shared, from server)
       var WX = [{e:"☀️",t:"clear"},{e:"⛅",t:"cloudy"},{e:"🌧️",t:"rain"}];
       var wxChip = document.getElementById("wxChip");
@@ -1434,7 +1435,7 @@ data:
       }
       // 0 = day, 1 = deep night, based on the visitor's real local time
       function nightness(){
-        var d = new Date(), h = d.getHours() + d.getMinutes()/60;
+        var h = meadowHour;                  // shared across everyone in the meadow
         if (h >= 7 && h < 18) return 0;
         if (h >= 18 && h < 20) return (h-18)/2;
         if (h >= 5 && h < 7) return (7-h)/2;
@@ -1496,6 +1497,7 @@ data:
           }
           for (var id2 in sheep) if (!seen[id2]) delete sheep[id2];   // left the meadow
           if (typeof m.w === "number") setWeather(m.w);
+          if (typeof m.mt === "number") meadowHour = m.mt;
           document.getElementById("nSheep").textContent = m.n;
           document.getElementById("nGraze").textContent = m.graze.toLocaleString();
           document.getElementById("chillBar").style.width = m.chill + "%";
@@ -1604,8 +1606,8 @@ data:
           ctx.globalAlpha = 1;
         }
 
-        // time-of-day wash: warm at golden hour, deep blue at night, + fireflies
-        var hh = (new Date()).getHours() + (new Date()).getMinutes()/60;
+        // time-of-day wash: warm at golden hour, deep blue at night, + fireflies (shared meadow clock)
+        var hh = meadowHour;
         var gold = Math.max(0, 1 - Math.abs(hh - 18.7)/1.6);
         if (gold > 0){ ctx.fillStyle = "rgba(240,150,70," + (gold*0.16) + ")"; ctx.fillRect(0,0,cv.width,cv.height); }
         var nf = nightness();
@@ -2032,7 +2034,7 @@ data:
         var y = 30 + (row % 3)*18 + (Math.floor(row/3)*4);
         return { x: Math.min(90, x), y: Math.min(72, y) };
       }
-      function riderFor(g){ return g.host ? "🌵" : (g.id===myId ? "🤠" : "😌"); }
+      function riderFor(g){ return g.emoji || (g.id===myId ? "🤠" : "😌"); }
       function makeHammock(g){
         var h = document.createElement("div"); h.className = "hammock" + (g.id===myId ? " me":"") + (g.host ? " host":"");
         h.innerHTML = '<div class="swing"><div class="rope"></div><div class="cloth"></div>'+
