@@ -1345,6 +1345,23 @@ data:
         color:#ffe6ad;font-family:var(--mono);font-size:.9rem;letter-spacing:.08em;text-align:center;transition:opacity .6s;}
       .conn.hide{opacity:0;pointer-events:none;}
       .conn .big{font-family:var(--display);font-size:1.6rem;text-transform:uppercase;margin-bottom:.4rem;color:#fff;}
+
+      .cpanel{position:fixed;top:60px;right:12px;z-index:9;width:min(280px,92vw);background:rgba(30,20,12,.9);
+        border:2px solid var(--wheat);border-radius:16px;padding:.9rem 1rem;backdrop-filter:blur(6px);
+        box-shadow:0 14px 40px rgba(0,0,0,.5);font-family:var(--mono);color:#ffe6ad;font-size:.8rem;}
+      .cpanel[hidden]{display:none;}
+      .cpanel h4{margin:0 0 .6rem;font-family:var(--display);font-size:1rem;letter-spacing:.05em;color:#fff;text-transform:uppercase;}
+      .cpanel label{display:block;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:#cbb187;margin:.5rem 0 .3rem;}
+      .cpanel input{width:100%;font:inherit;font-size:16px;border-radius:20px;border:2px solid var(--wheat);
+        background:rgba(251,244,226,.95);color:#33261a;padding:.45rem .7rem;outline:none;}
+      .cpanel .row{display:flex;flex-wrap:wrap;gap:.4rem;}
+      .cpanel .sw{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.35);cursor:pointer;padding:0;}
+      .cpanel .sw.on{border-color:#fff;box-shadow:0 0 0 2px var(--wheat);}
+      .cpanel .ht{min-width:30px;height:30px;border-radius:8px;border:2px solid rgba(255,255,255,.25);cursor:pointer;
+        background:rgba(255,255,255,.08);font-size:1rem;line-height:1;padding:0;color:#fff;}
+      .cpanel .ht.on{border-color:var(--wheat);background:rgba(217,164,65,.25);}
+      .cpanel .done{margin-top:.8rem;width:100%;font-family:var(--display);text-transform:uppercase;letter-spacing:.05em;
+        background:var(--terra);color:#f4ead0;border:2px solid var(--saddle-dk);border-radius:20px;padding:.5rem;cursor:pointer;}
     </style>
 
     <canvas id="c"></canvas>
@@ -1354,6 +1371,7 @@ data:
       <div style="display:flex;flex-direction:column;align-items:flex-end;">
         <div class="stats">
           <a class="chip" href="/ranch/" style="text-decoration:none">🌙 The Ranch →</a>
+          <button class="chip" id="custBtn" style="cursor:pointer" title="Customize your sheep">✎ your sheep</button>
           <button class="chip" id="sndBtn" style="cursor:pointer" title="Ambient sound">🔈 sound</button>
           <span class="chip" id="wxChip">☀️ clear</span>
           <span class="chip">🐑 <b id="nSheep">–</b> chilling</span>
@@ -1362,6 +1380,17 @@ data:
         </div>
         <div class="meter" title="Meadow Chill"><i id="chillBar"></i></div>
       </div>
+    </div>
+
+    <div class="cpanel" id="cpanel" hidden>
+      <h4>🐑 Your Sheep</h4>
+      <label>Name</label>
+      <input id="cName" maxlength="18" placeholder="name your sheep" autocomplete="off" />
+      <label>Fleece</label>
+      <div class="row" id="cColors"></div>
+      <label>Hat</label>
+      <div class="row" id="cHats"></div>
+      <button class="done" id="cDone">done</button>
     </div>
 
     <div class="hint" id="hint">move your pointer (or drag on touch) — your 🤠 sheep ambles over · stand still to nap · tap to baa</div>
@@ -1379,6 +1408,7 @@ data:
       var sheep = {};                  // id -> {x,y,rx,ry,state,face}
       var grass = new Array(COLS*ROWS).fill(6);
       var baas = [];                   // {x,y,t}
+      var execBubbles = {};            // id -> {text, t}  (AI banter above the exec sheep)
       var pointer = { x: W/2, y: H/2, active:false };
       var weather = 0;                       // 0 clear, 1 cloudy, 2 rain (shared, from server)
       var WX = [{e:"☀️",t:"clear"},{e:"⛅",t:"cloudy"},{e:"🌧️",t:"rain"}];
@@ -1420,6 +1450,9 @@ data:
       // ---------- websocket ----------
       var ws, retry = 0, replaced = false, connEl = document.getElementById("conn"), connMsg = document.getElementById("connMsg");
       var token; try { token = localStorage.getItem("pastureId"); if (!token){ token = "s" + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("pastureId", token); } } catch(e){ token = "s" + Math.random().toString(36).slice(2); }
+      var myCustom = { name:"", color:-1, hat:"" };
+      try { myCustom.name = localStorage.getItem("chill-name") || ""; myCustom.color = +(localStorage.getItem("chill-color")); if (isNaN(myCustom.color)) myCustom.color = -1; myCustom.hat = localStorage.getItem("chill-hat") || ""; } catch(e){}
+      function sendCustom(){ if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"custom", name: myCustom.name||undefined, color: myCustom.color, hat: myCustom.hat })); }
       function connect(){
         if (replaced) return;
         var proto = location.protocol === "https:" ? "wss" : "ws";
@@ -1427,8 +1460,8 @@ data:
         catch(e){ scheduleRetry(); return; }
         ws.onopen = function(){
           retry = 0; connEl.classList.add("hide");
-          var nm = null; try { nm = localStorage.getItem("chill-name"); } catch(e){}
-          ws.send(JSON.stringify({ t:"hello", token: token, name: nm || undefined }));
+          ws.send(JSON.stringify({ t:"hello", token: token, name: myCustom.name || undefined }));
+          if (myCustom.color >= 0 || myCustom.hat || myCustom.name) sendCustom();
         };
         ws.onclose = function(ev){
           if (ev && ev.code === 4001){                    // taken over by another tab of the same browser
@@ -1450,7 +1483,8 @@ data:
           grass = new Array(COLS*ROWS).fill(6); resize();
           document.getElementById("youName").textContent = myName;
         } else if (m.t === "r"){
-          roster = {}; for (var k in m.roster) roster[k] = { name:m.roster[k][0], hue:m.roster[k][1], role:m.roster[k][2]||"" };
+          roster = {}; for (var k in m.roster){ var e=m.roster[k]; roster[k] = { name:e[0], hue:e[1], role:e[2]||"", color:(e[3]==null?-1:e[3]), hat:e[4]||"" }; }
+          if (myId!=null && roster[myId]) document.getElementById("youName").textContent = roster[myId].name;   // reflect the real (customized) name
         } else if (m.t === "s"){
           var seen = {};
           for (var i=0;i<m.sheep.length;i++){
@@ -1469,6 +1503,8 @@ data:
           for (var j=0;j<m.grass.length && j<grass.length;j++) grass[j] = +m.grass[j];
         } else if (m.t === "b"){
           var bs = sheep[m.id]; if (bs) baas.push({ id:m.id, t: performance.now() });
+        } else if (m.t === "say"){
+          execBubbles[m.id] = { text: m.text, t: performance.now() };
         }
       }
       connect();
@@ -1547,6 +1583,15 @@ data:
         var ids = Object.keys(sheep).sort(function(a,b){ return sheep[a].ry - sheep[b].ry; });
         for (var k=0;k<ids.length;k++) drawSheep(ids[k]);
 
+        // exec AI speech bubbles (drawn above the herd)
+        for (var eid in execBubbles){
+          var eb = execBubbles[eid]; if (now - eb.t > 7000){ delete execBubbles[eid]; continue; }
+          var es = sheep[eid]; if (!es) continue;
+          ctx.globalAlpha = (now - eb.t > 6200) ? Math.max(0, (7000-(now-eb.t))/800) : 1;
+          drawSpeechBubble(toScreenX(es.rx), toScreenY(es.ry) - view.s*44, eb.text);
+          ctx.globalAlpha = 1;
+        }
+
         // baa bubbles
         for (var bi=baas.length-1; bi>=0; bi--){
           var ba = baas[bi], age = (now - ba.t)/1200, ss = sheep[ba.id];
@@ -1604,6 +1649,26 @@ data:
         requestAnimationFrame(render);
       }
 
+      function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+      function drawSpeechBubble(cx, baseY, text){
+        var u = view.s;
+        ctx.font = "600 " + (u*11) + "px system-ui, -apple-system, sans-serif";
+        var words = text.split(" "), lines = [], cur = "";
+        for (var i=0;i<words.length;i++){ var tst = cur ? cur+" "+words[i] : words[i];
+          if (ctx.measureText(tst).width > u*150 && cur){ lines.push(cur); cur = words[i]; } else cur = tst; }
+        if (cur) lines.push(cur);
+        if (lines.length > 3){ lines = lines.slice(0,3); lines[2] = lines[2].slice(0,22) + "…"; }
+        var w = 0; for (var l=0;l<lines.length;l++) w = Math.max(w, ctx.measureText(lines[l]).width);
+        var padX = u*9, padY = u*6, lh = u*14;
+        var bw = w + padX*2, bh = lines.length*lh + padY*2, bx = cx - bw/2, by = baseY - bh;
+        ctx.fillStyle = "rgba(251,244,226,.96)"; ctx.strokeStyle = "rgba(74,47,28,.5)"; ctx.lineWidth = Math.max(1, u*1.2);
+        roundRect(bx, by, bw, bh, u*8); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx-u*6, by+bh-u*0.5); ctx.lineTo(cx+u*6, by+bh-u*0.5); ctx.lineTo(cx, by+bh+u*8); ctx.closePath();
+        ctx.fillStyle = "rgba(251,244,226,.96)"; ctx.fill();
+        ctx.fillStyle = "#33261a"; ctx.textAlign = "center";
+        for (var l2=0;l2<lines.length;l2++) ctx.fillText(lines[l2], cx, by + padY + lh*(l2+1) - u*3.5);
+      }
+
       // campfire the herd gathers around; flames flicker, glow strengthens at night
       function drawCampfire(now){
         var cx = toScreenX(W*0.5), cy = toScreenY(H*0.6);
@@ -1644,7 +1709,7 @@ data:
       }
 
       function drawSheep(id){
-        var s = sheep[id], info = roster[id] || { name:"", hue:0 };
+        var s = sheep[id], info = roster[id] || { name:"", hue:0, color:-1, hat:"" };
         var x = toScreenX(s.rx), y = toScreenY(s.ry), u = view.s;   // u = world->screen unit
         var mine = (+id === myId);
         var asleep = s.state === 3, grazing = s.state === 2, walking = s.state === 1;
@@ -1660,8 +1725,8 @@ data:
         ctx.moveTo(x-u*8, y+u*6); ctx.lineTo(x-u*8, y+u*12);
         ctx.moveTo(x+u*8, y+u*6); ctx.lineTo(x+u*8, y+u*12); ctx.stroke();
 
-        // fluffy body (cluster of circles)
-        ctx.fillStyle = mine ? "#fffdf5" : "#f3efe4";
+        // fluffy body (cluster of circles) — fleece can be tinted a pastel colour
+        ctx.fillStyle = (info.color != null && info.color >= 0) ? "hsl("+info.color+",50%,90%)" : (mine ? "#fffdf5" : "#f3efe4");
         var body = [[0,-2,17],[-11,-4,10],[11,-4,10],[-6,-12,10],[7,-12,10],[0,-16,9]];
         for (var i=0;i<body.length;i++){ ctx.beginPath(); ctx.arc(x+body[i][0]*u+wob, y+body[i][1]*u, body[i][2]*u, 0, 6.28); ctx.fill(); }
 
@@ -1693,6 +1758,8 @@ data:
           ctx.font = (u*20)+"px sans-serif"; ctx.textAlign="center"; ctx.fillText("🤠", hx, hy - u*10);
         } else if (info.role && HATS[info.role]){
           ctx.font = (u*20)+"px sans-serif"; ctx.textAlign="center"; ctx.fillText(HATS[info.role], hx, hy - u*10);
+        } else if (info.hat){
+          ctx.font = (u*18)+"px sans-serif"; ctx.textAlign="center"; ctx.fillText(info.hat, hx, hy - u*10);
         }
 
         // name label (execs get a gold "Name · ROLE" plate)
@@ -1763,6 +1830,39 @@ data:
           sndBtn.textContent = "🔈 sound";
         }
       });
+
+      // ---------- customize your sheep (name + fleece colour + hat) ----------
+      (function(){
+        var COLORS = [-1, 20, 45, 95, 150, 200, 260, 320];      // -1 = classic white
+        var HAT_LIST = ["", "🎩", "🎀", "👒", "🌸", "🧢", "⭐", "🌵", "🎧"];
+        var cName = document.getElementById("cName"), cColors = document.getElementById("cColors"),
+            cHats = document.getElementById("cHats"), cDone = document.getElementById("cDone"),
+            custBtn = document.getElementById("custBtn"), cpanel = document.getElementById("cpanel");
+        cName.value = myCustom.name;
+        function apply(){
+          try { localStorage.setItem("chill-name", myCustom.name); localStorage.setItem("chill-color", myCustom.color); localStorage.setItem("chill-hat", myCustom.hat); } catch(e){}
+          sendCustom();
+          if (myCustom.name) document.getElementById("youName").textContent = myCustom.name;
+        }
+        COLORS.forEach(function(h){
+          var b = document.createElement("button"); b.className = "sw" + (h===myCustom.color?" on":"");
+          b.style.background = h<0 ? "#f3efe4" : "hsl("+h+",50%,88%)"; b.title = h<0 ? "classic white" : "coloured fleece";
+          b.addEventListener("click", function(){ myCustom.color = h;
+            Array.prototype.forEach.call(cColors.children, function(x){ x.classList.remove("on"); }); b.classList.add("on"); apply(); });
+          cColors.appendChild(b);
+        });
+        HAT_LIST.forEach(function(ht){
+          var b = document.createElement("button"); b.className = "ht" + (ht===myCustom.hat?" on":""); b.textContent = ht || "∅";
+          b.addEventListener("click", function(){ myCustom.hat = ht;
+            Array.prototype.forEach.call(cHats.children, function(x){ x.classList.remove("on"); }); b.classList.add("on"); apply(); });
+          cHats.appendChild(b);
+        });
+        cName.addEventListener("input", function(){ myCustom.name = cName.value.trim(); });
+        cName.addEventListener("change", apply);
+        cName.addEventListener("keydown", function(e){ if (e.key==="Enter"){ e.preventDefault(); apply(); cName.blur(); } });
+        custBtn.addEventListener("click", function(){ cpanel.hidden = !cpanel.hidden; });
+        cDone.addEventListener("click", function(){ myCustom.name = cName.value.trim(); apply(); cpanel.hidden = true; });
+      })();
     })();
     </script>
   ranch.html: |
