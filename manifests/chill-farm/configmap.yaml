@@ -1382,6 +1382,16 @@ data:
         backdrop-filter:blur(4px);text-align:center;pointer-events:none;animation:midpop .6s var(--ease);}
       .midbanner[hidden]{display:none;}
       @keyframes midpop{from{opacity:0;transform:translate(-50%,-50%) scale(.8);}to{opacity:1;transform:translate(-50%,-50%) scale(1);}}
+
+      .bookpanel{max-height:74vh;}
+      .booklist{max-height:40vh;overflow-y:auto;margin:.3rem 0 .6rem;display:flex;flex-direction:column;gap:.35rem;font-size:.78rem;}
+      .booklist .bk{color:#f0e4cf;line-height:1.3;word-wrap:break-word;}
+      .booklist .bk b{color:#ffd86b;font-family:var(--mono);}
+      .emotebar{position:fixed;right:12px;bottom:12px;z-index:9;display:flex;gap:.3rem;background:rgba(30,20,12,.8);
+        border:1px solid rgba(217,164,65,.5);border-radius:30px;padding:.3rem .4rem;backdrop-filter:blur(4px);box-shadow:0 8px 22px rgba(0,0,0,.4);}
+      .emotebar button{width:34px;height:34px;border:none;border-radius:50%;background:rgba(255,255,255,.08);cursor:pointer;font-size:1.05rem;line-height:1;padding:0;}
+      .emotebar button:hover{background:rgba(217,164,65,.3);}
+      @media (max-width:520px){ .emotebar button{width:30px;height:30px;font-size:.95rem;} }
     </style>
 
     <canvas id="c"></canvas>
@@ -1392,11 +1402,12 @@ data:
         <div class="stats">
           <a class="chip" href="/ranch/" style="text-decoration:none">🌙 The Ranch →</a>
           <button class="chip" id="custBtn" style="cursor:pointer" title="Customize your sheep">✎ your sheep</button>
+          <button class="chip" id="bookBtn" style="cursor:pointer" title="The fence guestbook">📖 fence</button>
           <button class="chip" id="sndBtn" style="cursor:pointer" title="Ambient sound">🔈 sound</button>
           <span class="chip" id="wxChip">☀️ clear</span>
           <span class="chip">🐑 <b id="nSheep">–</b> chilling</span>
           <span class="chip">🌿 grazed <b id="nGraze">0</b></span>
-          <span class="chip">you're <b id="youName">…</b></span>
+          <span class="chip">you're <b id="youName">…</b> · 🌿<b id="chillPts">0</b> · <span id="youTitle" style="color:#ffd86b"></span></span>
         </div>
         <div class="meter" title="Meadow Chill"><i id="chillBar"></i></div>
       </div>
@@ -1415,6 +1426,17 @@ data:
 
     <div class="mbanner" id="mbanner" hidden>📋 <b id="mtopic"></b></div>
     <div class="midbanner" id="midbanner" hidden>🌙 Meadow Midnight — make a wish ✨</div>
+
+    <div class="cpanel bookpanel" id="bookpanel" hidden>
+      <h4>📖 The Fence</h4>
+      <div class="booklist" id="booklist"></div>
+      <input id="carveIn" maxlength="100" placeholder="carve a note…" autocomplete="off" />
+      <button class="done" id="carveBtn">carve it</button>
+    </div>
+
+    <div class="emotebar" id="emotebar">
+      <button type="button" data-e="💛">💛</button><button type="button" data-e="💤">💤</button><button type="button" data-e="🎵">🎵</button><button type="button" data-e="😂">😂</button><button type="button" data-e="✨">✨</button><button type="button" data-e="🌿">🌿</button>
+    </div>
 
     <div class="askbar" id="askbar" hidden>
       <span id="askLabel">Ask</span>
@@ -1441,6 +1463,9 @@ data:
       var execBubbles = {};            // id -> {text, t}  (AI banter above the exec sheep)
       var qBubbles = {};               // id -> {text, t}  (visitor questions above the asker)
       var askTarget = null;            // exec id currently being asked
+      var guestbook = [];              // carved names on the fence
+      var emotes = [];                 // {id, e, t}  floating emotes above sheep
+      var nuzzles = [];                // {x, y, t}   auto hearts between close sheep
       var pointer = { x: W/2, y: H/2, active:false };
       var meadowHour = 13;                   // shared meadow time-of-day (0-24), from server
       var rainbowUntil = 0, midnightUntil = 0, midnightSparkles = [], shootStars = [], nextShoot = 0, seasonParticles = [];
@@ -1526,8 +1551,18 @@ data:
           grass = new Array(COLS*ROWS).fill(6); resize();
           document.getElementById("youName").textContent = myName;
         } else if (m.t === "r"){
-          roster = {}; for (var k in m.roster){ var e=m.roster[k]; roster[k] = { name:e[0], hue:e[1], role:e[2]||"", color:(e[3]==null?-1:e[3]), hat:e[4]||"" }; }
-          if (myId!=null && roster[myId]) document.getElementById("youName").textContent = roster[myId].name;   // reflect the real (customized) name
+          roster = {}; for (var k in m.roster){ var e=m.roster[k]; roster[k] = { name:e[0], hue:e[1], role:e[2]||"", color:(e[3]==null?-1:e[3]), hat:e[4]||"", points:e[5]||0, title:e[6]||"" }; }
+          if (myId!=null && roster[myId]){
+            document.getElementById("youName").textContent = roster[myId].name;      // real (customized) name
+            document.getElementById("chillPts").textContent = roster[myId].points;
+            document.getElementById("youTitle").textContent = roster[myId].title;
+          }
+        } else if (m.t === "book"){
+          guestbook = m.entries || []; renderBook();
+        } else if (m.t === "carved"){
+          guestbook.push(m.entry); if (guestbook.length > 60) guestbook.shift(); renderBook();
+        } else if (m.t === "emote"){
+          emotes.push({ id:m.id, e:m.e, t:performance.now() });
         } else if (m.t === "s"){
           var seen = {};
           for (var i=0;i<m.sheep.length;i++){
@@ -1575,7 +1610,7 @@ data:
       }
       addEventListener("pointermove", setPointerFromEvent, { passive:true });
       addEventListener("pointerdown", function(e){
-        if (e.target && e.target.closest && e.target.closest(".askbar, .cpanel, .hud")) return;  // ignore UI taps
+        if (e.target && e.target.closest && e.target.closest(".askbar, .cpanel, .hud, .emotebar")) return;  // ignore UI taps
         setPointerFromEvent(e);
         var hit = execAtScreen(e);
         if (hit != null) openAsk(hit); else baa();
@@ -1699,6 +1734,18 @@ data:
           ctx.textAlign = "center"; ctx.fillText("baa~", bx, by);
           ctx.font = (view.s*22)+"px sans-serif"; ctx.fillText("💛", bx + view.s*24, by - view.s*6*Math.sin(age*6));
           ctx.globalAlpha = 1;
+        }
+
+        // floating emotes above sheep + auto-nuzzle hearts
+        for (var emi=emotes.length-1; emi>=0; emi--){ var em=emotes[emi], eage=(now-em.t)/1600, esh=sheep[em.id];
+          if (eage>=1 || !esh){ emotes.splice(emi,1); continue; }
+          ctx.globalAlpha=1-eage; ctx.font=(view.s*22)+"px sans-serif"; ctx.textAlign="center";
+          ctx.fillText(em.e, toScreenX(esh.rx), toScreenY(esh.ry)-view.s*40-eage*view.s*30); ctx.globalAlpha=1;
+        }
+        for (var nzi=nuzzles.length-1; nzi>=0; nzi--){ var nz=nuzzles[nzi], nage=(now-nz.t)/1500;
+          if (nage>=1){ nuzzles.splice(nzi,1); continue; }
+          ctx.globalAlpha=1-nage; ctx.font=(view.s*15)+"px sans-serif"; ctx.textAlign="center";
+          ctx.fillText("💛", toScreenX(nz.x), toScreenY(nz.y)-nage*view.s*24); ctx.globalAlpha=1;
         }
 
         // time-of-day wash: warm at golden hour, deep blue at night, + fireflies (shared meadow clock)
@@ -2043,6 +2090,30 @@ data:
         custBtn.addEventListener("click", function(){ cpanel.hidden = !cpanel.hidden; });
         cDone.addEventListener("click", function(){ myCustom.name = cName.value.trim(); apply(); cpanel.hidden = true; });
       })();
+
+      // ---------- guestbook (the fence) + emotes + nuzzles ----------
+      function renderBook(){
+        var bl = document.getElementById("booklist"); if (!bl) return; bl.innerHTML = "";
+        for (var i=Math.max(0, guestbook.length-40); i<guestbook.length; i++){ var g=guestbook[i];
+          var d=document.createElement("div"); d.className="bk";
+          var b=document.createElement("b"); b.textContent=g.name; d.appendChild(b);
+          d.appendChild(document.createTextNode(" — " + g.text)); bl.appendChild(d); }
+        bl.scrollTop = bl.scrollHeight;
+      }
+      var bookpanel = document.getElementById("bookpanel"), carveIn = document.getElementById("carveIn");
+      document.getElementById("bookBtn").addEventListener("click", function(){ bookpanel.hidden = !bookpanel.hidden; if (!bookpanel.hidden) renderBook(); });
+      function carve(){ var t = carveIn.value.trim(); if (!t) return; if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"carve", text:t })); carveIn.value=""; }
+      document.getElementById("carveBtn").addEventListener("click", carve);
+      carveIn.addEventListener("keydown", function(e){ if (e.key==="Enter"){ e.preventDefault(); carve(); } });
+      Array.prototype.forEach.call(document.querySelectorAll(".emotebar button"), function(b){
+        b.addEventListener("click", function(){ if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"emote", e:b.getAttribute("data-e") })); });
+      });
+      setInterval(function(){
+        if (reduce) return; var ids = Object.keys(sheep);
+        for (var i=0;i<ids.length;i++) for (var j=i+1;j<ids.length;j++){ var a=sheep[ids[i]], b=sheep[ids[j]]; if(!a||!b) continue;
+          var d=Math.hypot(a.rx-b.rx, a.ry-b.ry);
+          if (d<38 && Math.random()<0.12){ nuzzles.push({ x:(a.rx+b.rx)/2, y:(a.ry+b.ry)/2, t:performance.now() }); } }
+      }, 1600);
     })();
     </script>
   ranch.html: |
