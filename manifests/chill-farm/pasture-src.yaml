@@ -91,9 +91,35 @@ data:
     const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
     const AI_ON = !process.env.AI_OFF;
     let aiInFlight = 0, lastSayAt = 0, lastLine = null;
+    let aiCalls = [];                                   // timestamps for a hard rate cap (defense-in-depth)
+    function aiRateOk() {
+      const now = Date.now();
+      aiCalls = aiCalls.filter((t) => now - t < 60000);
+      if (aiCalls.length >= 15) return false;           // max 15 inferences/min, whatever the traffic
+      aiCalls.push(now); return true;
+    }
+
+    const HAT_WORDS = { '🎩': 'a top hat', '🎀': 'a bow', '👒': 'a sun hat', '🌸': 'a flower', '🧢': 'a cap', '⭐': 'a star', '🌵': 'a lil cactus', '🎧': 'headphones' };
+    function colorWord(h) {
+      if (h == null || h < 0) return '';
+      const names = [[15, 'red'], [45, 'orange'], [70, 'yellow'], [160, 'green'], [200, 'teal'], [255, 'blue'], [290, 'purple'], [335, 'pink'], [361, 'red']];
+      for (const [max, n] of names) if (h < max) return n;
+      return '';
+    }
+    function lookDesc(c) {
+      const bits = [];
+      const cw = colorWord(c.color); if (cw) bits.push(cw + ' fleece');
+      if (c.hat && HAT_WORDS[c.hat]) bits.push('wearing ' + HAT_WORDS[c.hat]);
+      return bits.length ? ' (' + bits.join(', ') + ')' : '';
+    }
+    function moodClause() {
+      return weather === 2 ? ' It is raining, so sound cozy but a touch sleepy and reluctant, like you want to nap.'
+        : weather === 1 ? ' It is overcast and mellow.'
+        : ' It is bright and sunny, so sound extra cheery and warm.';
+    }
 
     async function askLLM(sys, user) {
-      if (!AI_ON || aiInFlight >= 2 || typeof fetch !== 'function') return null;
+      if (!AI_ON || aiInFlight >= 2 || typeof fetch !== 'function' || !aiRateOk()) return null;
       aiInFlight++;
       const ctl = new AbortController();
       const to = setTimeout(() => ctl.abort(), 12000);      // allow for a cold model load (~6-8s)
@@ -114,7 +140,7 @@ data:
     function execSay(idx, user) {
       const e = EXECS[idx], b = bots[idx];
       if (!b) return;
-      const sys = `You are ${e.name}, ${e.persona}, at Chill Farm — a ranch where everyone relaxes instead of working. Reply with only ONE short, witty, ultra-chill one-liner under 12 words. No quotes, no preamble, no emojis.`;
+      const sys = `You are ${e.name}, ${e.persona}, at Chill Farm — a ranch where everyone relaxes instead of working.${moodClause()} Reply with only ONE short, witty, ultra-chill one-liner under 12 words. No quotes, no preamble, no emojis.`;
       askLLM(sys, user).then((line) => {
         const text = line || e.canned[(Math.random() * e.canned.length) | 0];
         lastLine = { name: e.name, text }; lastSayAt = Date.now();
@@ -134,8 +160,15 @@ data:
     setInterval(() => {
       if (Date.now() - lastSayAt < 6500) return;
       const idx = (Math.random() * EXECS.length) | 0;
-      if (lastLine && Math.random() < 0.5) execSay(idx, `Your colleague ${lastLine.name} just said: "${lastLine.text}". Give a chill one-line reply.`);
-      else execSay(idx, 'Say a chill one-liner a visitor wandering the ranch would overhear.');
+      const people = [...clients.values()];
+      if (people.length && Math.random() < 0.35) {
+        const v = people[(Math.random() * people.length) | 0];
+        execSay(idx, `Address a visitor named ${v.name}${lookDesc(v)} directly with one warm, playful, chill line. You may gently mention their look.`);
+      } else if (lastLine && Math.random() < 0.5) {
+        execSay(idx, `Your colleague ${lastLine.name} just said: "${lastLine.text}". Give a chill one-line reply.`);
+      } else {
+        execSay(idx, 'Say a chill one-liner a visitor wandering the ranch would overhear.');
+      }
     }, 15000);
 
     // ---- WS frame helpers (server->client, unmasked) ----
@@ -257,9 +290,9 @@ data:
           c.name = m.name.slice(0, 18).replace(/[^\w \-!]/g, '') || c.name;
           broadcastRoster();
         }
-        // an exec occasionally greets the newcomer by name
+        // an exec occasionally greets the newcomer by name (and notices their look)
         if (Date.now() - lastSayAt > 8000 && Math.random() < 0.6) {
-          execSay((Math.random() * EXECS.length) | 0, `A visitor named ${c.name} just wandered into the meadow. Greet them by name, warm and chill, one short line.`);
+          execSay((Math.random() * EXECS.length) | 0, `A visitor named ${c.name}${lookDesc(c)} just wandered into the meadow. Greet them by name, warm and chill, one short line; you may gently mention their look.`);
         }
         return;
       }
