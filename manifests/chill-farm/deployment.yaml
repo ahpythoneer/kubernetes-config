@@ -16,7 +16,7 @@ spec:
         app: chill-farm
       annotations:
         # bump this to force a rollout when the site content changes
-        chill-farm/content-rev: "3"
+        chill-farm/content-rev: "4"
     spec:
       containers:
       - name: nginx
