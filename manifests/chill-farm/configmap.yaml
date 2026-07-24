@@ -301,12 +301,26 @@ data:
       footer .fine { font-size: .74rem; color: #a58a63; margin-top: 1.6rem; }
       footer a { color: #ffe6ad; }
 
-      /* toast for easter eggs */
-      .toast { position: fixed; left: 50%; bottom: 2rem; transform: translate(-50%, 140%); z-index: 60;
+      /* toast for easter eggs — hidden with opacity+visibility so no empty sliver ever peeks */
+      .toast { position: fixed; left: 50%; bottom: 2rem; transform: translate(-50%, 160%); z-index: 60;
         background: var(--saddle-dk); color: #ffe6ad; font-family: var(--mono); font-size: .85rem; letter-spacing: .05em;
         padding: .8rem 1.4rem; border-radius: 40px; border: 2px solid var(--wheat); box-shadow: 0 10px 30px rgba(0,0,0,.4);
-        transition: transform .5s var(--ease-chill); pointer-events: none; }
-      .toast.show { transform: translate(-50%, 0); }
+        opacity: 0; visibility: hidden;
+        transition: transform .5s var(--ease-chill), opacity .4s var(--ease-chill), visibility .5s; pointer-events: none; }
+      .toast.show { transform: translate(-50%, 0); opacity: 1; visibility: visible; }
+
+      /* ---------- "you're working too hard" modal (shared with /careers) ---------- */
+      .chill-modal { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1.2rem;
+        background: color-mix(in srgb, var(--saddle-dk) 74%, transparent); backdrop-filter: blur(4px);
+        opacity: 0; visibility: hidden; transition: opacity .45s var(--ease-chill), visibility .45s; }
+      .chill-modal.open { opacity: 1; visibility: visible; }
+      .chill-modal__card { background: var(--card); color: var(--ink); border: 3px double var(--saddle);
+        border-radius: 16px; padding: clamp(1.6rem,5vw,2.6rem); max-width: 460px; text-align: center;
+        box-shadow: 0 26px 60px rgba(0,0,0,.5); transform: translateY(18px) scale(.96); transition: transform .45s var(--ease-chill); }
+      .chill-modal.open .chill-modal__card { transform: none; }
+      .chill-modal .cm-emoji { font-size: 3.4rem; animation: breathe 5s ease-in-out infinite; }
+      .chill-modal h2 { font-size: clamp(1.5rem,5vw,2.1rem); text-transform: uppercase; margin: .5rem 0 .2rem; letter-spacing: .01em; }
+      .chill-modal p { color: var(--ink-soft); font-size: .98rem; margin: .6rem 0 0; }
 
       /* MAXIMUM CHILL mode slows the whole ranch down */
       body.maxchill * { animation-duration: 3s !important; transition-duration: 1.4s !important; }
@@ -333,6 +347,7 @@ data:
         <a href="#crew">The Crew</a>
         <a href="#backlog">The Backlog</a>
         <a href="#values">How We Chill</a>
+        <a href="/careers/">Careers</a>
         <a href="#hire" class="hire-link">We're Hiring</a>
         <button class="theme-toggle" id="themeBtn" aria-label="Change the time of day" title="Sunrise / Sunset">🌤️</button>
       </nav>
@@ -428,7 +443,7 @@ data:
               <span class="pin">📌</span>
               <div class="avatar">💰</div>
               <div class="role">CFO</div>
-              <h3>Elias Tores</h3>
+              <h3>Elias Torres</h3>
               <div class="title">Chilling Financial Officer</div>
               <div class="bio">Balances the books and the vibes. Invests exclusively in lemonade, sunshine, and comfortable furniture.</div>
               <div class="chillstat">Chill Level: █████████░ 9.1 / 10</div>
@@ -485,8 +500,8 @@ data:
             <p>No experience required — in fact, we'd prefer you've never hustled a day in your life. Must supply own sunglasses. Ability to nap under pressure a plus.</p>
             <p style="font-family:var(--mono);font-size:.8rem;letter-spacing:.1em;margin-top:1rem;">STATUS: <strong style="color:var(--terra)">ALWAYS OPEN</strong> · SALARY: PAID IN SUNSETS</p>
             <div class="cta-row">
-              <a class="btn" href="mailto:howdy@only-chill.com?subject=I%20would%20like%20to%20chill&body=Dear%20Chill%20Farm%2C%20I%20am%20extremely%20relaxed%20and%20available%20immediately.">Apply to Chill</a>
-              <a class="btn ghost" href="#top">Take the Tour Again</a>
+              <button class="btn js-apply" type="button">Apply to Chill</button>
+              <a class="btn ghost" href="/careers/">See All Open Roles</a>
             </div>
           </div>
         </div>
@@ -498,13 +513,23 @@ data:
       <div class="fbrand">🤠 Chill Farm</div>
       <div class="crew">
         Aman Patel · CEO &nbsp;|&nbsp; Cody Beeston · CTO<br>
-        Joseph Taylor · COO &nbsp;|&nbsp; Elias Tores · CFO
+        Joseph Taylor · COO &nbsp;|&nbsp; Elias Torres · CFO
       </div>
       <div class="fine">
         only-chill.com — no cattle were rushed in the making of this ranch.<br>
         © <span id="yr"></span> Chill Farm. All rights relaxed.
       </div>
     </footer>
+
+    <!-- "you're working too hard" modal -->
+    <div class="chill-modal" id="chillModal" role="dialog" aria-modal="true" aria-labelledby="cmTitle">
+      <div class="chill-modal__card">
+        <div class="cm-emoji">🌴</div>
+        <h2 id="cmTitle">Chill, lad —<br>you're working too hard</h2>
+        <p>Applications are closed on account of it being a <em>beautiful day</em>. Go find a hammock — we'll notice you eventually.</p>
+        <button class="btn" type="button" data-close style="margin-top:1.4rem;">Okay, I'll relax 😌</button>
+      </div>
+    </div>
 
     <div class="toast" id="toast"></div>
     <div class="cno" id="cno" title="The Chief Napping Officer">🐈 <span class="zzz">💤</span></div>
@@ -659,10 +684,307 @@ data:
         if (maxOn && !reduce){ for (var i=0;i<10;i++) setTimeout(tumble, i*220); }
       }
 
+      /* ---------- "working too hard" apply modal ---------- */
+      var modal = document.getElementById("chillModal");
+      function openModal(){ modal.classList.add("open"); var b = modal.querySelector("[data-close]"); if(b) b.focus(); }
+      function closeModal(){ modal.classList.remove("open"); }
+      document.querySelectorAll(".js-apply").forEach(function(el){
+        el.addEventListener("click", function(e){ e.preventDefault(); openModal(); });
+      });
+      modal.addEventListener("click", function(e){ if (e.target === modal || e.target.hasAttribute("data-close")) closeModal(); });
+      addEventListener("keydown", function(e){ if (e.key === "Escape" && modal.classList.contains("open")) closeModal(); });
+
       /* 6. console note for the curious */
       try {
         console.log("%c🤠 Welcome to Chill Farm","font:700 22px Rockwell,serif;color:#c15a34;");
         console.log("%cWe're hiring people to chill — we've got so much chill in the backlog.\nTry the Konami code. Try typing 'chill'. Click the sun five times.\nhowdy@only-chill.com","font:13px monospace;color:#7a4a26;");
       } catch(_){}
+    })();
+    </script>
+  careers.html: |
+    <meta charset="utf-8" />
+    <title>Careers — Chill Farm</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Open roles at Chill Farm. We're hiring professional relaxers — no experience hustling required. Salary paid in sunsets." />
+    <style>
+      :root {
+        --sky-top:#8ec5e8; --sky-mid:#f5c877; --sky-low:#f2a65a; --orb:#ffd257; --orb-glow:#ffe9a8;
+        --hill-far:#c9b46e; --hill-mid:#8a9a55; --hill-near:#5f6f42;
+        --wheat:#d9a441; --wheat-deep:#b5822c; --saddle:#7a4a26; --saddle-dk:#4a2f1c; --denim:#3f6386; --terra:#c15a34;
+        --parch:#f4ead0; --parch-2:#ece0c2; --ink:#33261a; --ink-soft:#5c4a38; --card:#fbf4e2; --line:#d8c6a0;
+        --page-bg:#f4ead0; --shadow:rgba(74,47,28,.20);
+        --display:"Rockwell","Rockwell Nova","Roboto Slab","Courier New",Georgia,serif;
+        --body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+        --mono:"Courier New",ui-monospace,monospace;
+        --ease-chill:cubic-bezier(.22,.61,.36,1);
+      }
+      @media (prefers-color-scheme: dark){ :root{
+        --sky-top:#1a1633; --sky-mid:#4a2d55; --sky-low:#b5533f; --orb:#f4ecd0; --orb-glow:#d9d2f0;
+        --hill-far:#6a5a44; --hill-mid:#3f4a34; --hill-near:#28311f;
+        --parch:#221a24; --parch-2:#1a141c; --ink:#f0e4cf; --ink-soft:#c3b199; --card:#2a2030; --line:#43364a;
+        --page-bg:#1a141c; --shadow:rgba(0,0,0,.45);
+      }}
+      :root[data-theme="light"]{ --sky-top:#8ec5e8; --sky-mid:#f5c877; --sky-low:#f2a65a; --orb:#ffd257; --orb-glow:#ffe9a8;
+        --hill-far:#c9b46e; --hill-mid:#8a9a55; --hill-near:#5f6f42;
+        --parch:#f4ead0; --parch-2:#ece0c2; --ink:#33261a; --ink-soft:#5c4a38; --card:#fbf4e2; --line:#d8c6a0; --page-bg:#f4ead0; --shadow:rgba(74,47,28,.20); }
+      :root[data-theme="dark"]{ --sky-top:#1a1633; --sky-mid:#4a2d55; --sky-low:#b5533f; --orb:#f4ecd0; --orb-glow:#d9d2f0;
+        --hill-far:#6a5a44; --hill-mid:#3f4a34; --hill-near:#28311f;
+        --parch:#221a24; --parch-2:#1a141c; --ink:#f0e4cf; --ink-soft:#c3b199; --card:#2a2030; --line:#43364a; --page-bg:#1a141c; --shadow:rgba(0,0,0,.45); }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body { margin:0; font-family:var(--body); color:var(--ink); background:var(--page-bg); line-height:1.6;
+        overflow-x:hidden; transition:background .8s var(--ease-chill), color .8s var(--ease-chill); }
+      h1,h2,h3 { font-family:var(--display); font-weight:700; line-height:1.04; text-wrap:balance; margin:0; }
+      a { color:inherit; }
+      ::selection { background:var(--wheat); color:var(--saddle-dk); }
+
+      .topbar { position:sticky; top:0; z-index:40; display:flex; align-items:center; justify-content:space-between;
+        padding:.7rem clamp(1rem,4vw,2.4rem); backdrop-filter:blur(6px);
+        background:color-mix(in srgb, var(--page-bg) 78%, transparent);
+        border-bottom:1px solid color-mix(in srgb, var(--ink) 12%, transparent); }
+      .brand { display:flex; align-items:center; gap:.55rem; font-family:var(--display); font-size:1.05rem; letter-spacing:.04em; text-decoration:none; }
+      .brand .badge { width:26px; height:26px; display:grid; place-items:center; background:var(--wheat); color:var(--saddle-dk);
+        border-radius:50%; font-size:1rem; box-shadow:inset 0 0 0 2px var(--saddle-dk); }
+      .navlinks { display:flex; gap:1.4rem; align-items:center; font-size:.82rem; letter-spacing:.12em; text-transform:uppercase; }
+      .navlinks a { text-decoration:none; opacity:.8; transition:opacity .3s; }
+      .navlinks a:hover { opacity:1; }
+      .theme-toggle { border:1px solid color-mix(in srgb, var(--ink) 25%, transparent); background:transparent; color:inherit;
+        cursor:pointer; width:40px; height:40px; border-radius:50%; font-size:1.1rem; display:grid; place-items:center;
+        transition:transform .5s var(--ease-chill), background .3s; }
+      .theme-toggle:hover { transform:rotate(40deg); background:color-mix(in srgb, var(--wheat) 25%, transparent); }
+      @media (max-width:640px){ .navlinks a:not(.home-link){ display:none; } }
+
+      /* banner */
+      .banner { position:relative; overflow:hidden; padding:clamp(3rem,8vw,5.5rem) clamp(1.2rem,6vw,3rem) clamp(2.5rem,6vw,4rem);
+        background:linear-gradient(180deg, var(--sky-top), var(--sky-mid) 130%); }
+      .banner .sun { position:absolute; top:-40px; right:8%; width:150px; height:150px; border-radius:50%;
+        background:radial-gradient(circle at 38% 35%, var(--orb-glow), var(--orb) 60%);
+        box-shadow:0 0 70px 24px color-mix(in srgb, var(--orb) 55%, transparent); animation:breathe 9s ease-in-out infinite; }
+      @keyframes breathe { 0%,100%{ box-shadow:0 0 60px 18px color-mix(in srgb,var(--orb) 55%,transparent);} 50%{ box-shadow:0 0 90px 30px color-mix(in srgb,var(--orb) 70%,transparent);} }
+      .banner .wrap { position:relative; z-index:2; }
+      .wrap { max-width:1080px; margin:0 auto; }
+      .eyebrow { font-family:var(--mono); font-size:.76rem; letter-spacing:.34em; text-transform:uppercase; color:var(--saddle-dk);
+        display:inline-flex; align-items:center; gap:.6rem; }
+      .eyebrow::before { content:""; width:26px; height:2px; background:var(--saddle-dk); display:inline-block; }
+      .banner h1 { font-size:clamp(2.4rem,8vw,4.6rem); text-transform:uppercase; letter-spacing:.01em; margin:.5rem 0 .6rem; color:var(--saddle-dk); }
+      .banner .lead { font-size:clamp(1.05rem,2.4vw,1.3rem); color:var(--saddle-dk); max-width:56ch; opacity:.9; }
+      .banner .pill { display:inline-block; margin-top:1.2rem; font-family:var(--mono); font-size:.76rem; letter-spacing:.14em;
+        text-transform:uppercase; background:var(--saddle-dk); color:#ffe6ad; padding:.5rem 1rem; border-radius:40px; }
+
+      .band { padding:clamp(3rem,8vw,6rem) clamp(1.2rem,6vw,3rem); }
+
+      /* job grid */
+      .jobs { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:clamp(1rem,3vw,1.6rem); margin-top:.5rem; }
+      .job { position:relative; background:var(--card); border:2px solid var(--line); border-radius:14px; padding:1.5rem 1.4rem;
+        display:flex; flex-direction:column; box-shadow:0 10px 24px var(--shadow);
+        transition:transform .45s var(--ease-chill), box-shadow .45s; }
+      .job:hover { transform:translateY(-6px); box-shadow:0 22px 40px var(--shadow); }
+      .job .ji { font-size:2.2rem; }
+      .job .dept { font-family:var(--mono); font-size:.7rem; letter-spacing:.18em; text-transform:uppercase; color:var(--terra);
+        font-weight:700; margin-top:.6rem; }
+      .job h3 { font-size:1.35rem; text-transform:uppercase; margin:.15rem 0 .5rem; }
+      .job p { font-size:.92rem; color:var(--ink-soft); margin:0 0 1rem; }
+      .job .meta { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:1.1rem; }
+      .job .tag { font-family:var(--mono); font-size:.68rem; letter-spacing:.06em; background:var(--parch-2); color:var(--ink-soft);
+        border:1px solid var(--line); border-radius:20px; padding:.2rem .6rem; }
+      .job .foot { margin-top:auto; display:flex; align-items:center; justify-content:space-between; gap:.6rem; }
+      .job .pay { font-family:var(--mono); font-size:.72rem; color:var(--wheat-deep); }
+
+      .btn { display:inline-block; text-decoration:none; cursor:pointer; font-family:var(--display); text-transform:uppercase;
+        letter-spacing:.06em; font-size:.92rem; color:#f4ead0; background:var(--terra); padding:.6rem 1.3rem; border-radius:40px;
+        border:2px solid var(--saddle-dk); box-shadow:0 5px 0 var(--saddle-dk); transition:transform .2s var(--ease-chill), box-shadow .2s; }
+      .btn:active { transform:translateY(4px); box-shadow:0 1px 0 var(--saddle-dk); }
+      .btn.ghost { background:transparent; color:var(--ink); box-shadow:0 5px 0 var(--line); border-color:var(--line); }
+      .btn.big { font-size:1.05rem; padding:.85rem 2rem; box-shadow:0 6px 0 var(--saddle-dk); }
+
+      /* closing */
+      .closing { text-align:center; background:linear-gradient(180deg, var(--parch), var(--parch-2)); }
+      .closing h2 { font-size:clamp(1.8rem,5vw,2.8rem); text-transform:uppercase; }
+      .closing p { color:var(--ink-soft); max-width:52ch; margin:.6rem auto 1.4rem; }
+
+      footer { background:var(--saddle-dk); color:#e9d7b5; text-align:center; padding:clamp(2.2rem,6vw,3.4rem) 1.5rem 2.4rem; }
+      footer .fbrand { font-family:var(--display); font-size:1.6rem; text-transform:uppercase; letter-spacing:.06em; color:#ffe6ad; }
+      footer .crew { font-family:var(--mono); font-size:.78rem; letter-spacing:.1em; color:#cbb187; margin-top:.8rem; line-height:1.9; }
+      footer .fine { font-size:.74rem; color:#a58a63; margin-top:1.4rem; }
+      footer a { color:#ffe6ad; }
+
+      .reveal { opacity:0; transform:translateY(24px); transition:opacity .8s var(--ease-chill), transform .8s var(--ease-chill); }
+      .reveal.in { opacity:1; transform:none; }
+
+      .chill-modal { position:fixed; inset:0; z-index:80; display:grid; place-items:center; padding:1.2rem;
+        background:color-mix(in srgb, var(--saddle-dk) 74%, transparent); backdrop-filter:blur(4px);
+        opacity:0; visibility:hidden; transition:opacity .45s var(--ease-chill), visibility .45s; }
+      .chill-modal.open { opacity:1; visibility:visible; }
+      .chill-modal__card { background:var(--card); color:var(--ink); border:3px double var(--saddle); border-radius:16px;
+        padding:clamp(1.6rem,5vw,2.6rem); max-width:460px; text-align:center; box-shadow:0 26px 60px rgba(0,0,0,.5);
+        transform:translateY(18px) scale(.96); transition:transform .45s var(--ease-chill); }
+      .chill-modal.open .chill-modal__card { transform:none; }
+      .chill-modal .cm-emoji { font-size:3.4rem; animation:breathe 5s ease-in-out infinite; }
+      .chill-modal h2 { font-size:clamp(1.5rem,5vw,2.1rem); text-transform:uppercase; margin:.5rem 0 .2rem; }
+      .chill-modal p { color:var(--ink-soft); font-size:.98rem; margin:.6rem 0 0; }
+
+      @media (prefers-reduced-motion: reduce){
+        *,*::before,*::after { animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
+        .reveal { opacity:1; transform:none; }
+      }
+    </style>
+
+    <header class="topbar">
+      <a class="brand" href="/"><span class="badge">🤠</span> Chill&nbsp;Farm</a>
+      <nav class="navlinks">
+        <a href="/" class="home-link">Home</a>
+        <a href="/#crew">The Crew</a>
+        <a href="/#values">How We Chill</a>
+        <button class="theme-toggle" id="themeBtn" aria-label="Change the time of day" title="Sunrise / Sunset">🌤️</button>
+      </nav>
+    </header>
+
+    <section class="banner">
+      <div class="sun" aria-hidden="true"></div>
+      <div class="wrap">
+        <span class="eyebrow">Now Hiring · Always Open</span>
+        <h1>Come Work<br>Absolutely Nothing</h1>
+        <p class="lead">We've got so much chill in the backlog that we simply cannot get to it all ourselves. If you can sit still and mean it, there's a hammock here with your name on it.</p>
+        <span class="pill">Salary: paid in sunsets 🌅 · Benefits: shade, snacks, silence</span>
+      </div>
+    </section>
+
+    <main>
+      <section class="band">
+        <div class="wrap">
+          <div class="reveal">
+            <span class="eyebrow">Open Roles</span>
+          </div>
+          <div class="jobs">
+
+            <article class="job reveal">
+              <div class="ji">🛖</div>
+              <div class="dept">Relaxation Engineering</div>
+              <h3>Senior Hammock Engineer</h3>
+              <p>Architect, load-test, and personally occupy hammocks across the ranch. Must have strong opinions on the ideal sway frequency.</p>
+              <div class="meta"><span class="tag">Full-recline</span><span class="tag">On-site (a tree)</span><span class="tag">Sr. level</span></div>
+              <div class="foot"><span class="pay">☀️☀️☀️☀️</span><button class="btn js-apply" type="button">Apply</button></div>
+            </article>
+
+            <article class="job reveal">
+              <div class="ji">😴</div>
+              <div class="dept">Executive Lounge</div>
+              <h3>VP of Doing Nothing</h3>
+              <p>Lead by example. Set the strategic direction for our nothing initiatives and hold zero meetings. Extensive nothing experience required.</p>
+              <div class="meta"><span class="tag">Leadership</span><span class="tag">Fully idle</span><span class="tag">Equity in naps</span></div>
+              <div class="foot"><span class="pay">☀️☀️☀️☀️☀️</span><button class="btn js-apply" type="button">Apply</button></div>
+            </article>
+
+            <article class="job reveal">
+              <div class="ji">🌅</div>
+              <div class="dept">Ambiance</div>
+              <h3>Sunset Coordination Lead</h3>
+              <p>Own the golden hour end-to-end. Ensure every evening lands on exactly the right shade of amber. Cloud-arranging a plus.</p>
+              <div class="meta"><span class="tag">Evenings only</span><span class="tag">Outdoors</span></div>
+              <div class="foot"><span class="pay">☀️☀️☀️☀️</span><button class="btn js-apply" type="button">Apply</button></div>
+            </article>
+
+            <article class="job reveal">
+              <div class="ji">🍋</div>
+              <div class="dept">Hospitality</div>
+              <h3>Head of Lemonade</h3>
+              <p>Keep every pitcher full and every glass clinking. You'll set our refreshment roadmap and taste-test aggressively. Own the whole squeeze.</p>
+              <div class="meta"><span class="tag">Shade provided</span><span class="tag">Snacks incl.</span></div>
+              <div class="foot"><span class="pay">☀️☀️☀️</span><button class="btn js-apply" type="button">Apply</button></div>
+            </article>
+
+            <article class="job reveal">
+              <div class="ji">🐈</div>
+              <div class="dept">R&amp;D · Rest &amp; Dreams</div>
+              <h3>Junior Nap Quality Analyst</h3>
+              <p>Report directly to the Chief Napping Officer. Rigorously evaluate nap depth, blanket softness, and afternoon-light quality. Yawning encouraged.</p>
+              <div class="meta"><span class="tag">Entry level</span><span class="tag">Cushions supplied</span></div>
+              <div class="foot"><span class="pay">☀️☀️☀️</span><button class="btn js-apply" type="button">Apply</button></div>
+            </article>
+
+            <article class="job reveal">
+              <div class="ji">☁️</div>
+              <div class="dept">Observation</div>
+              <h3>Cloud Watcher</h3>
+              <p>Lie on your back and identify shapes. Strictly no cloud <em>infrastructure</em> experience required — in fact, we'd prefer you forgot all that.</p>
+              <div class="meta"><span class="tag">Remote (a field)</span><span class="tag">Flexible</span></div>
+              <div class="foot"><span class="pay">☀️☀️</span><button class="btn js-apply" type="button">Apply</button></div>
+            </article>
+
+            <article class="job reveal">
+              <div class="ji">🎸</div>
+              <div class="dept">Culture</div>
+              <h3>Porch Vibes Curator</h3>
+              <p>From a rocking chair, curate the ranch's acoustic ambiance. Gentle strumming, tasteful humming. Must own at least one comfortable hat.</p>
+              <div class="meta"><span class="tag">Part-time</span><span class="tag">BYO hat</span></div>
+              <div class="foot"><span class="pay">☀️☀️☀️</span><button class="btn js-apply" type="button">Apply</button></div>
+            </article>
+
+            <article class="job reveal">
+              <div class="ji">🌾</div>
+              <div class="dept">Grounds</div>
+              <h3>Tumbleweed Wrangler</h3>
+              <p>Gently redirect our free-range tumbleweeds toward more scenic routes. The only hard requirement: you must move slowly at all times.</p>
+              <div class="meta"><span class="tag">Seasonal</span><span class="tag">Low urgency</span></div>
+              <div class="foot"><span class="pay">☀️☀️</span><button class="btn js-apply" type="button">Apply</button></div>
+            </article>
+
+          </div>
+        </div>
+      </section>
+
+      <section class="band closing">
+        <div class="wrap reveal">
+          <h2>Don't See Your Dream Nap?</h2>
+          <p>We're flexible. If your particular flavor of doing-very-little isn't listed, tell us about it — eventually.</p>
+          <button class="btn big js-apply" type="button">Apply to Chill Anyway</button>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="fbrand">🤠 Chill Farm</div>
+      <div class="crew">
+        Aman Patel · CEO &nbsp;|&nbsp; Cody Beeston · CTO<br>
+        Joseph Taylor · COO &nbsp;|&nbsp; Elias Torres · CFO
+      </div>
+      <div class="fine">
+        <a href="/">← back to the ranch</a><br>
+        only-chill.com — all positions permanently, blissfully open.
+      </div>
+    </footer>
+
+    <div class="chill-modal" id="chillModal" role="dialog" aria-modal="true" aria-labelledby="cmTitle">
+      <div class="chill-modal__card">
+        <div class="cm-emoji">🌴</div>
+        <h2 id="cmTitle">Chill, lad —<br>you're working too hard</h2>
+        <p>Applications are closed on account of it being a <em>beautiful day</em>. Go find a hammock — we'll notice you eventually.</p>
+        <button class="btn" type="button" data-close style="margin-top:1.4rem;">Okay, I'll relax 😌</button>
+      </div>
+    </div>
+
+    <script>
+    (function(){
+      "use strict";
+      var root = document.documentElement, tBtn = document.getElementById("themeBtn");
+      function isDark(){ var t = root.getAttribute("data-theme"); if (t) return t === "dark"; return matchMedia("(prefers-color-scheme: dark)").matches; }
+      function syncIcon(){ tBtn.textContent = isDark() ? "🌙" : "🌤️"; }
+      tBtn.addEventListener("click", function(){ root.setAttribute("data-theme", isDark() ? "light" : "dark"); syncIcon(); });
+      syncIcon();
+
+      var io = new IntersectionObserver(function(entries){
+        entries.forEach(function(e){ if (e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target); } });
+      }, { threshold:.12, rootMargin:"0px 0px -8% 0px" });
+      document.querySelectorAll(".reveal").forEach(function(el){ io.observe(el); });
+
+      var modal = document.getElementById("chillModal");
+      function openModal(){ modal.classList.add("open"); var b = modal.querySelector("[data-close]"); if (b) b.focus(); }
+      function closeModal(){ modal.classList.remove("open"); }
+      document.querySelectorAll(".js-apply").forEach(function(el){ el.addEventListener("click", function(e){ e.preventDefault(); openModal(); }); });
+      modal.addEventListener("click", function(e){ if (e.target === modal || e.target.hasAttribute("data-close")) closeModal(); });
+      addEventListener("keydown", function(e){ if (e.key === "Escape" && modal.classList.contains("open")) closeModal(); });
+
+      try { console.log("%c🤠 Chill Farm careers — you're already overqualified.","font:13px monospace;color:#7a4a26;"); } catch(_){}
     })();
     </script>
