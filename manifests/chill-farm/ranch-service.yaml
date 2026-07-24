@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: chill-ranch
+  namespace: chill-farm
+  labels:
+    app: chill-ranch
+spec:
+  type: ClusterIP
+  selector:
+    app: chill-ranch
+  ports:
+  - name: ws
+    port: 8080
+    targetPort: ws
+    protocol: TCP

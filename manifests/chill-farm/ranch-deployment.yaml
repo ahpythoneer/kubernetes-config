@@ -1,28 +1,27 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: chill-pasture
+  name: chill-ranch
   namespace: chill-farm
   labels:
-    app: chill-pasture
+    app: chill-ranch
 spec:
-  # single replica on purpose: authoritative in-memory game state (one shared meadow)
+  # single replica: authoritative in-memory lounge state (one shared ranch)
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: chill-pasture
+      app: chill-ranch
   template:
     metadata:
       labels:
-        app: chill-pasture
+        app: chill-ranch
       annotations:
-        # bump to force a rollout when server.js changes
-        chill-pasture/src-rev: "3"
+        chill-ranch/src-rev: "1"
     spec:
       containers:
-      - name: pasture
+      - name: ranch
         image: node:20-alpine
         imagePullPolicy: IfNotPresent
         command: ["node", "/app/server.js"]
@@ -64,7 +63,7 @@ spec:
       volumes:
       - name: src
         configMap:
-          name: chill-pasture-src
+          name: chill-ranch-src
           items:
           - key: server.js
             path: server.js

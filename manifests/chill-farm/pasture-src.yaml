@@ -54,6 +54,9 @@ data:
     function sendRaw(c, buf) { try { c.sock.write(buf); } catch (e) { drop(c); } }
     function send(c, obj) { sendRaw(c, encode(JSON.stringify(obj))); }
     function broadcast(obj) { const b = encode(JSON.stringify(obj)); for (const c of clients.values()) sendRaw(c, b); }
+    const PING = Buffer.from([0x89, 0]);                        // ping frame
+    function closeFrame(code) { const b = Buffer.alloc(4); b[0] = 0x88; b[1] = 2; b.writeUInt16BE(code, 2); return b; }
+    const byToken = new Map();                                  // browser token -> client id (one browser = one sheep)
 
     // ---- HTTP + upgrade ----
     function meadowChill() { let s = 0; for (let i = 0; i < grass.length; i++) s += grass[i]; return Math.round((s / grass.length) * 100); }
@@ -88,7 +91,7 @@ data:
         name: ADJ[(Math.random() * ADJ.length) | 0] + ' ' + NOUN[(Math.random() * NOUN.length) | 0],
         hue: (id * 47) % 360,
         x: W / 2 + (Math.random() * 200 - 100), y: H / 2 + (Math.random() * 160 - 80),
-        tx: 0, ty: 0, state: 0, lastInput: Date.now(), alive: true,
+        tx: 0, ty: 0, state: 0, lastInput: Date.now(), lastSeen: Date.now(), token: null, alive: true,
       };
       c.tx = c.x; c.ty = c.y;
       clients.set(id, c);
@@ -107,12 +110,14 @@ data:
       if (!c.alive) return;
       c.alive = false;
       clients.delete(c.id);
+      if (c.token && byToken.get(c.token) === c.id) byToken.delete(c.token);
       try { c.sock.destroy(); } catch (e) {}
       broadcastRoster();
     }
 
     // ---- incoming frame parser (client->server, masked) ----
     function onData(c, chunk) {
+      c.lastSeen = Date.now();                    // any traffic (incl. pong) = alive
       c.buf = Buffer.concat([c.buf, chunk]);
       while (true) {
         const b = c.buf;
@@ -139,6 +144,23 @@ data:
 
     function onMessage(c, str) {
       let m; try { m = JSON.parse(str); } catch (e) { return; }
+      if (m.t === 'hello') {
+        // one browser = one sheep: reuse identity across refresh/tabs, evict the ghost
+        if (typeof m.token === 'string' && m.token.length <= 64) {
+          const prev = byToken.get(m.token);
+          if (prev && prev !== c.id && clients.has(prev)) {
+            const old = clients.get(prev);
+            try { old.sock.write(closeFrame(4001)); } catch (e) {}
+            drop(old);
+          }
+          c.token = m.token; byToken.set(m.token, c.id);
+        }
+        if (typeof m.name === 'string' && m.name.trim()) {
+          c.name = m.name.slice(0, 18).replace(/[^\w \-!]/g, '') || c.name;
+          broadcastRoster();
+        }
+        return;
+      }
       if (m.t === 'move') {
         if (typeof m.x === 'number' && typeof m.y === 'number') {
           c.tx = Math.max(0, Math.min(W, m.x));
@@ -223,6 +245,15 @@ data:
       // grass @ 2Hz
       if (frame % 5 === 0) broadcast({ t: 'g', grass: grassStr() });
     }, TICK_MS);
+
+    // liveness: ping everyone, reap ghosts whose connection quietly died (dropped wifi, etc.)
+    setInterval(() => {
+      const now = Date.now();
+      for (const c of clients.values()) {
+        if (now - c.lastSeen > 32000) { drop(c); continue; }
+        sendRaw(c, PING);
+      }
+    }, 12000);
 
     function cellIndex(x, y) {
       let cx = (x / CW) | 0, cy = (y / CH) | 0;

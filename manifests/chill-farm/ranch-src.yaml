@@ -1,0 +1,158 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chill-ranch-src
+  namespace: chill-farm
+  labels:
+    app: chill-ranch
+data:
+  server.js: |
+    'use strict';
+    /* ============================================================
+       Chill Farm — "/ranch" hammock lounge (chat) server
+       Dependency-free WebSocket server. Everyone who joins gets a
+       hammock; they can set a name and chat. Cozy, no game loop.
+       ============================================================ */
+    const http = require('http');
+    const crypto = require('crypto');
+
+    const PORT = process.env.PORT || 8080;
+    const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+    const MAX_MSG = 240, HISTORY = 40;
+
+    const ADJ = ['Mellow','Breezy','Cozy','Sunny','Easy','Dozy','Calm','Serene','Lazy','Comfy','Drowsy','Chill'];
+    const NOUN = ['Rancher','Napper','Dreamer','Wrangler','Lounger','Drifter','Cowpoke','Sipper','Gazer','Strummer'];
+
+    const clients = new Map();          // id -> { sock, buf, name, hue, slot, lastSeen, token, alive }
+    const byToken = new Map();
+    const usedSlots = new Set();
+    const history = [];                 // recent chat, newest last
+    let nextId = 1;
+
+    function clean(s, max) { return String(s == null ? '' : s).replace(/[\x00-\x1f\x7f]/g, '').slice(0, max).trim(); }
+    function freeSlot() { let s = 0; while (usedSlots.has(s)) s++; usedSlots.add(s); return s; }
+
+    // ---- WS frame helpers ----
+    function encode(str) {
+      const p = Buffer.from(str); const n = p.length; let head;
+      if (n < 126) head = Buffer.from([0x81, n]);
+      else if (n < 65536) { head = Buffer.alloc(4); head[0] = 0x81; head[1] = 126; head.writeUInt16BE(n, 2); }
+      else { head = Buffer.alloc(10); head[0] = 0x81; head[1] = 127; head.writeBigUInt64BE(BigInt(n), 2); }
+      return Buffer.concat([head, p]);
+    }
+    function sendRaw(c, buf) { try { c.sock.write(buf); } catch (e) { drop(c); } }
+    function send(c, obj) { sendRaw(c, encode(JSON.stringify(obj))); }
+    function broadcast(obj) { const b = encode(JSON.stringify(obj)); for (const c of clients.values()) sendRaw(c, b); }
+    const PING = Buffer.from([0x89, 0]);
+    function closeFrame(code) { const b = Buffer.alloc(4); b[0] = 0x88; b[1] = 2; b.writeUInt16BE(code, 2); return b; }
+
+    const server = http.createServer((req, res) => {
+      const url = req.url || '/';
+      if (url.endsWith('/healthz')) { res.writeHead(200); res.end('ok'); return; }
+      if (url.endsWith('/stats')) {
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
+        res.end(JSON.stringify({ guests: clients.size }));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('chill ranch :: ' + clients.size + ' loungin');
+    });
+
+    server.on('upgrade', (req, sock) => {
+      const key = req.headers['sec-websocket-key'];
+      if (!key) { sock.destroy(); return; }
+      const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
+      sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
+      onConnect(sock);
+    });
+
+    function onConnect(sock) {
+      const id = nextId++;
+      const c = {
+        id, sock, buf: Buffer.alloc(0),
+        name: ADJ[(Math.random() * ADJ.length) | 0] + ' ' + NOUN[(Math.random() * NOUN.length) | 0],
+        hue: (id * 47) % 360, slot: freeSlot(), lastSeen: Date.now(), token: null, alive: true,
+      };
+      clients.set(id, c);
+      sock.setNoDelay(true);
+      sock.on('data', (chunk) => onData(c, chunk));
+      sock.on('close', () => drop(c));
+      sock.on('error', () => drop(c));
+      send(c, { t: 'welcome', id });
+      send(c, { t: 'hist', msgs: history });
+      broadcastRoster();
+    }
+
+    function drop(c) {
+      if (!c.alive) return;
+      c.alive = false;
+      clients.delete(c.id);
+      usedSlots.delete(c.slot);
+      if (c.token && byToken.get(c.token) === c.id) byToken.delete(c.token);
+      try { c.sock.destroy(); } catch (e) {}
+      broadcastRoster();
+    }
+
+    function onData(c, chunk) {
+      c.lastSeen = Date.now();
+      c.buf = Buffer.concat([c.buf, chunk]);
+      while (true) {
+        const b = c.buf; if (b.length < 2) return;
+        const opcode = b[0] & 0x0f, masked = b[1] & 0x80;
+        let len = b[1] & 0x7f, off = 2;
+        if (len === 126) { if (b.length < 4) return; len = b.readUInt16BE(2); off = 4; }
+        else if (len === 127) { if (b.length < 10) return; len = Number(b.readBigUInt64BE(2)); off = 10; }
+        if (len > 1_000_000) { drop(c); return; }
+        let mask; if (masked) { if (b.length < off + 4) return; mask = b.slice(off, off + 4); off += 4; }
+        if (b.length < off + len) return;
+        let pay = b.slice(off, off + len);
+        if (masked) { const o = Buffer.alloc(len); for (let i = 0; i < len; i++) o[i] = pay[i] ^ mask[i & 3]; pay = o; }
+        c.buf = b.slice(off + len);
+        if (opcode === 0x8) { drop(c); return; }
+        else if (opcode === 0x9) { sendRaw(c, Buffer.concat([Buffer.from([0x8a, pay.length & 0x7f]), pay])); }
+        else if (opcode === 0x1) { onMessage(c, pay.toString()); }
+      }
+    }
+
+    function onMessage(c, str) {
+      let m; try { m = JSON.parse(str); } catch (e) { return; }
+      if (m.t === 'hello') {
+        if (typeof m.token === 'string' && m.token.length <= 64) {
+          const prev = byToken.get(m.token);
+          if (prev && prev !== c.id && clients.has(prev)) {
+            const old = clients.get(prev);
+            try { old.sock.write(closeFrame(4001)); } catch (e) {}
+            drop(old);
+          }
+          c.token = m.token; byToken.set(m.token, c.id);
+        }
+        const nm = clean(m.name, 18);
+        if (nm) c.name = nm;
+        broadcastRoster();
+      } else if (m.t === 'name') {
+        const nm = clean(m.name, 18);
+        if (nm) { c.name = nm; broadcastRoster(); }
+      } else if (m.t === 'chat') {
+        const text = clean(m.text, MAX_MSG);
+        if (!text) return;
+        const msg = { id: c.id, name: c.name, hue: c.hue, text, ts: Date.now() };
+        history.push(msg); if (history.length > HISTORY) history.shift();
+        broadcast({ t: 'chat', m: msg });
+      }
+    }
+
+    function broadcastRoster() {
+      const guests = [];
+      for (const c of clients.values()) guests.push({ id: c.id, name: c.name, hue: c.hue, slot: c.slot });
+      broadcast({ t: 'r', guests, n: clients.size });
+    }
+
+    setInterval(() => {
+      const now = Date.now();
+      for (const c of clients.values()) {
+        if (now - c.lastSeen > 32000) { drop(c); continue; }
+        sendRaw(c, PING);
+      }
+    }, 12000);
+
+    server.listen(PORT, () => console.log('chill ranch listening on :' + PORT));
