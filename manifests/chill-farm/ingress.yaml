@@ -24,6 +24,13 @@ spec:
             name: chill-pasture
             port:
               number: 8080
+      - path: /rw
+        pathType: Prefix
+        backend:
+          service:
+            name: chill-ranch
+            port:
+              number: 8080
       - path: /
         pathType: Prefix
         backend:
@@ -39,6 +46,13 @@ spec:
         backend:
           service:
             name: chill-pasture
+            port:
+              number: 8080
+      - path: /rw
+        pathType: Prefix
+        backend:
+          service:
+            name: chill-ranch
             port:
               number: 8080
       - path: /

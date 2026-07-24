@@ -128,3 +128,7 @@ resources:
   - manifests/chill-farm/pasture-src.yaml
   - manifests/chill-farm/pasture-deployment.yaml
   - manifests/chill-farm/pasture-service.yaml
+  # Chill Farm — "/ranch" hammock lounge chat (dependency-free node WS server)
+  - manifests/chill-farm/ranch-src.yaml
+  - manifests/chill-farm/ranch-deployment.yaml
+  - manifests/chill-farm/ranch-service.yaml
