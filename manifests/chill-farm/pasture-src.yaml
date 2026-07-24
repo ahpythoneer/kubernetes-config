@@ -96,11 +96,11 @@ data:
       if (!AI_ON || aiInFlight >= 2 || typeof fetch !== 'function') return null;
       aiInFlight++;
       const ctl = new AbortController();
-      const to = setTimeout(() => ctl.abort(), 6000);
+      const to = setTimeout(() => ctl.abort(), 12000);      // allow for a cold model load (~6-8s)
       try {
         const res = await fetch(OLLAMA_URL + '/api/generate', {
           method: 'POST', signal: ctl.signal, headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ model: OLLAMA_MODEL, system: sys, prompt: user, stream: false, options: { num_predict: 40, temperature: 1.0 } }),
+          body: JSON.stringify({ model: OLLAMA_MODEL, system: sys, prompt: user, stream: false, keep_alive: '30m', options: { num_predict: 40, temperature: 1.0 } }),
         });
         if (!res.ok) return null;
         const j = await res.json();
@@ -120,6 +120,14 @@ data:
         lastLine = { name: e.name, text }; lastSayAt = Date.now();
         broadcast({ t: 'say', id: b.id, text });
       });
+    }
+
+    // warm the model at boot (and keep it loaded) so the first banter is snappy
+    if (AI_ON && typeof fetch === 'function') {
+      fetch(OLLAMA_URL + '/api/generate', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: OLLAMA_MODEL, prompt: 'hi', stream: false, keep_alive: '30m', options: { num_predict: 1 } }),
+      }).then(() => console.log('ollama warm')).catch(() => console.log('ollama warm failed (will use canned lines)'));
     }
 
     // ambient banter + a little dialogue between the execs
