@@ -67,8 +67,16 @@ data:
     const regrowFactor = () => (weather === 2 ? 2.3 : weather === 1 ? 1.3 : 1);
 
     const EXECS = [
-      { name: 'Aman', role: 'CEO' }, { name: 'Cody', role: 'CTO' }, { name: 'Joseph', role: 'COO' },
-      { name: 'Elias', role: 'CFO' }, { name: 'Francisco', role: 'CPO' },
+      { name: 'Aman', role: 'CEO', persona: 'the mellow founder-CEO who leads mostly by taking naps',
+        canned: ['I lead best from a hammock.', "Vision meeting? Just cloud-watching.", "We're scaling our relaxation."] },
+      { name: 'Cody', role: 'CTO', persona: 'the laid-back CTO who automated everything so nobody has to work',
+        canned: ['My code deploys itself while I nap.', 'Automated the chores, kept the hammocks.', 'If it needs doing, I automated it away.'] },
+      { name: 'Joseph', role: 'COO', persona: 'the COO who keeps operations running smoothly by keeping them slow',
+        canned: ["It'll get done. Eventually. Maybe.", "Ops run smooth 'cause they run slow.", 'No rush is the whole strategy.'] },
+      { name: 'Elias', role: 'CFO', persona: 'the CFO who invests only in lemonade, shade, and sunsets',
+        canned: ['Calculating the value of doing nothing.', 'Our biggest asset is shade.', "Books balanced, so are the vibes."] },
+      { name: 'Francisco', role: 'CPO', persona: 'the people-officer whose whole motto is "there is life outside work"',
+        canned: ["There is life outside work, y'know.", 'Clock out. Go live a little.', 'Your best KPI is a good nap.'] },
     ];
     const bots = EXECS.map((e, i) => ({
       id: 1000000 + i, name: e.name, role: e.role, hue: (i * 67) % 360,
@@ -76,6 +84,51 @@ data:
       tx: 0, ty: 0, state: 0, freeMode: 'graze', nextWander: 0,
     }));
     bots.forEach((b) => { b.tx = b.x; b.ty = b.y; });
+
+    // ---- sheep customization + AI banter (DGX Spark Ollama) ----
+    const HAT_OK = new Set(['', '🎩', '🎀', '👒', '🌸', '🧢', '⭐', '🌵', '🎧']);
+    const OLLAMA_URL = process.env.OLLAMA_URL || 'http://10.0.129.94:11434';
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
+    const AI_ON = !process.env.AI_OFF;
+    let aiInFlight = 0, lastSayAt = 0, lastLine = null;
+
+    async function askLLM(sys, user) {
+      if (!AI_ON || aiInFlight >= 2 || typeof fetch !== 'function') return null;
+      aiInFlight++;
+      const ctl = new AbortController();
+      const to = setTimeout(() => ctl.abort(), 6000);
+      try {
+        const res = await fetch(OLLAMA_URL + '/api/generate', {
+          method: 'POST', signal: ctl.signal, headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ model: OLLAMA_MODEL, system: sys, prompt: user, stream: false, options: { num_predict: 40, temperature: 1.0 } }),
+        });
+        if (!res.ok) return null;
+        const j = await res.json();
+        let t = (j.response || '').trim().replace(/^["'\s]+|["'\s]+$/g, '').split('\n')[0].trim();
+        if (t.length > 90) t = t.slice(0, 88) + '…';
+        return t || null;
+      } catch (e) { return null; }
+      finally { clearTimeout(to); aiInFlight--; }
+    }
+
+    function execSay(idx, user) {
+      const e = EXECS[idx], b = bots[idx];
+      if (!b) return;
+      const sys = `You are ${e.name}, ${e.persona}, at Chill Farm — a ranch where everyone relaxes instead of working. Reply with only ONE short, witty, ultra-chill one-liner under 12 words. No quotes, no preamble, no emojis.`;
+      askLLM(sys, user).then((line) => {
+        const text = line || e.canned[(Math.random() * e.canned.length) | 0];
+        lastLine = { name: e.name, text }; lastSayAt = Date.now();
+        broadcast({ t: 'say', id: b.id, text });
+      });
+    }
+
+    // ambient banter + a little dialogue between the execs
+    setInterval(() => {
+      if (Date.now() - lastSayAt < 6500) return;
+      const idx = (Math.random() * EXECS.length) | 0;
+      if (lastLine && Math.random() < 0.5) execSay(idx, `Your colleague ${lastLine.name} just said: "${lastLine.text}". Give a chill one-line reply.`);
+      else execSay(idx, 'Say a chill one-liner a visitor wandering the ranch would overhear.');
+    }, 15000);
 
     // ---- WS frame helpers (server->client, unmasked) ----
     function encode(str) {
@@ -128,6 +181,7 @@ data:
         hue: (id * 47) % 360,
         x: W / 2 + (Math.random() * 200 - 100), y: H / 2 + (Math.random() * 160 - 80),
         tx: 0, ty: 0, state: 0, lastInput: Date.now(), lastSeen: Date.now(), token: null, alive: true,
+        color: -1, hat: '',
       };
       c.tx = c.x; c.ty = c.y;
       clients.set(id, c);
@@ -195,6 +249,10 @@ data:
           c.name = m.name.slice(0, 18).replace(/[^\w \-!]/g, '') || c.name;
           broadcastRoster();
         }
+        // an exec occasionally greets the newcomer by name
+        if (Date.now() - lastSayAt > 8000 && Math.random() < 0.6) {
+          execSay((Math.random() * EXECS.length) | 0, `A visitor named ${c.name} just wandered into the meadow. Greet them by name, warm and chill, one short line.`);
+        }
         return;
       }
       if (m.t === 'move') {
@@ -205,16 +263,24 @@ data:
         }
       } else if (m.t === 'baa') {
         broadcast({ t: 'b', id: c.id });
+        if (Date.now() - lastSayAt > 9000 && Math.random() < 0.25) {
+          execSay((Math.random() * EXECS.length) | 0, 'A sheep just let out a loud "baa". React with one chill, amused one-liner.');
+        }
       } else if (m.t === 'name' && typeof m.name === 'string') {
         c.name = m.name.slice(0, 18).replace(/[^\w \-!]/g, '') || c.name;
+        broadcastRoster();
+      } else if (m.t === 'custom') {
+        if (typeof m.name === 'string' && m.name.trim()) c.name = m.name.slice(0, 18).replace(/[^\w \-!]/g, '') || c.name;
+        if (typeof m.color === 'number') c.color = m.color < 0 ? -1 : Math.max(0, Math.min(360, m.color | 0));
+        if (typeof m.hat === 'string' && HAT_OK.has(m.hat)) c.hat = m.hat;
         broadcastRoster();
       }
     }
 
     function broadcastRoster() {
       const r = {};
-      for (const c of clients.values()) r[c.id] = [c.name, c.hue, ''];
-      for (const b of bots) r[b.id] = [b.name, b.hue, b.role];
+      for (const c of clients.values()) r[c.id] = [c.name, c.hue, '', (c.color == null ? -1 : c.color), c.hat || ''];
+      for (const b of bots) r[b.id] = [b.name, b.hue, b.role, -1, ''];
       broadcast({ t: 'r', roster: r });
     }
     function sendGrass(c) { send(c, { t: 'g', grass: grassStr() }); }
