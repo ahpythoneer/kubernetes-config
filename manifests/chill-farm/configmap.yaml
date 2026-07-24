@@ -1,0 +1,667 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chill-farm-site
+  namespace: chill-farm
+  labels:
+    app: chill-farm
+data:
+  index.html: |
+    <title>Chill Farm — We're Hiring People to Chill</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Chill Farm: we are hiring people to chill as we have so much chill in the backlog. A ranch for professional relaxers." />
+    <style>
+      /* ============================================================
+         CHILL FARM — only-chill.com
+         A ranch that runs entirely on chill.
+         Theme toggle changes the time of day: light = golden hour, dark = dusk.
+         ============================================================ */
+
+      :root {
+        /* ---- time-of-day: GOLDEN AFTERNOON (light) ---- */
+        --sky-top:    #8ec5e8;   /* warm afternoon blue   */
+        --sky-mid:    #f5c877;   /* low golden light      */
+        --sky-low:    #f2a65a;   /* horizon amber         */
+        --orb:        #ffd257;   /* the sun               */
+        --orb-glow:   #ffe9a8;
+        --hill-far:   #c9b46e;   /* dry wheat hills       */
+        --hill-mid:   #8a9a55;   /* sage                  */
+        --hill-near:  #5f6f42;   /* deep sage             */
+
+        --wheat:      #d9a441;   /* primary accent, wheat gold */
+        --wheat-deep: #b5822c;
+        --saddle:     #7a4a26;   /* wood                  */
+        --saddle-dk:  #4a2f1c;
+        --denim:      #3f6386;   /* small cool pop        */
+        --terra:      #c15a34;   /* branding-iron red     */
+
+        --parch:      #f4ead0;   /* content ground        */
+        --parch-2:    #ece0c2;
+        --ink:        #33261a;   /* warm near-black text  */
+        --ink-soft:   #5c4a38;
+        --card:       #fbf4e2;
+        --line:       #d8c6a0;
+
+        --page-bg:    #f4ead0;
+        --shadow:     rgba(74,47,28,.20);
+
+        --display: "Rockwell", "Rockwell Nova", "Roboto Slab", "Courier New", Georgia, serif;
+        --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --mono: "Courier New", ui-monospace, monospace;
+
+        --ease-chill: cubic-bezier(.22,.61,.36,1);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --sky-top:  #1a1633;
+          --sky-mid:  #4a2d55;
+          --sky-low:  #b5533f;
+          --orb:      #f4ecd0;   /* the moon */
+          --orb-glow: #d9d2f0;
+          --hill-far: #6a5a44;
+          --hill-mid: #3f4a34;
+          --hill-near:#28311f;
+
+          --parch:    #221a24;
+          --parch-2:  #1a141c;
+          --ink:      #f0e4cf;
+          --ink-soft: #c3b199;
+          --card:     #2a2030;
+          --line:     #43364a;
+
+          --page-bg:  #1a141c;
+          --shadow:   rgba(0,0,0,.45);
+        }
+      }
+      /* explicit toggle wins in both directions */
+      :root[data-theme="light"] {
+        --sky-top:#8ec5e8; --sky-mid:#f5c877; --sky-low:#f2a65a; --orb:#ffd257; --orb-glow:#ffe9a8;
+        --hill-far:#c9b46e; --hill-mid:#8a9a55; --hill-near:#5f6f42;
+        --parch:#f4ead0; --parch-2:#ece0c2; --ink:#33261a; --ink-soft:#5c4a38; --card:#fbf4e2; --line:#d8c6a0;
+        --page-bg:#f4ead0; --shadow:rgba(74,47,28,.20);
+      }
+      :root[data-theme="dark"] {
+        --sky-top:#1a1633; --sky-mid:#4a2d55; --sky-low:#b5533f; --orb:#f4ecd0; --orb-glow:#d9d2f0;
+        --hill-far:#6a5a44; --hill-mid:#3f4a34; --hill-near:#28311f;
+        --parch:#221a24; --parch-2:#1a141c; --ink:#f0e4cf; --ink-soft:#c3b199; --card:#2a2030; --line:#43364a;
+        --page-bg:#1a141c; --shadow:rgba(0,0,0,.45);
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        font-family: var(--body);
+        color: var(--ink);
+        background: var(--page-bg);
+        line-height: 1.6;
+        overflow-x: hidden;
+        transition: background .8s var(--ease-chill), color .8s var(--ease-chill);
+      }
+      h1,h2,h3 { font-family: var(--display); font-weight: 700; line-height: 1.02; text-wrap: balance; margin: 0; }
+      a { color: inherit; }
+      ::selection { background: var(--wheat); color: var(--saddle-dk); }
+
+      /* ---------- top bar ---------- */
+      .topbar {
+        position: fixed; inset: 0 0 auto 0; z-index: 40;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: .7rem clamp(1rem, 4vw, 2.4rem);
+        backdrop-filter: blur(6px);
+        background: color-mix(in srgb, var(--page-bg) 62%, transparent);
+        border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+      }
+      .brand { display: flex; align-items: center; gap: .55rem; font-family: var(--display); font-size: 1.05rem; letter-spacing: .04em; cursor: pointer; user-select: none; }
+      .brand .badge { width: 26px; height: 26px; display: grid; place-items: center; background: var(--wheat); color: var(--saddle-dk); border-radius: 50%; font-size: 1rem; box-shadow: inset 0 0 0 2px var(--saddle-dk); }
+      .navlinks { display: flex; gap: 1.4rem; align-items: center; font-size: .82rem; letter-spacing: .12em; text-transform: uppercase; }
+      .navlinks a { text-decoration: none; opacity: .8; transition: opacity .3s; }
+      .navlinks a:hover { opacity: 1; }
+      .theme-toggle {
+        border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent);
+        background: transparent; color: inherit; cursor: pointer;
+        width: 40px; height: 40px; border-radius: 50%; font-size: 1.1rem;
+        display: grid; place-items: center; transition: transform .5s var(--ease-chill), background .3s;
+      }
+      .theme-toggle:hover { transform: rotate(40deg); background: color-mix(in srgb, var(--wheat) 25%, transparent); }
+      @media (max-width: 720px){ .navlinks a:not(.hire-link){ display:none; } }
+
+      /* ---------- HERO scene ---------- */
+      .hero { position: relative; height: 100svh; min-height: 620px; overflow: hidden; display: grid; place-items: center; }
+      .sky {
+        position: absolute; inset: 0;
+        background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 62%, var(--sky-low) 100%);
+        transition: background .8s var(--ease-chill);
+      }
+      /* sun / moon */
+      .orb {
+        position: absolute; top: 16%; left: 50%; transform: translateX(-50%);
+        width: 150px; height: 150px; border-radius: 50%;
+        background: radial-gradient(circle at 38% 35%, var(--orb-glow), var(--orb) 60%);
+        box-shadow: 0 0 70px 24px color-mix(in srgb, var(--orb) 60%, transparent);
+        cursor: pointer; z-index: 3; animation: breathe 9s ease-in-out infinite;
+        transition: background .8s var(--ease-chill), box-shadow .8s;
+      }
+      @keyframes breathe { 0%,100%{ box-shadow:0 0 60px 18px color-mix(in srgb,var(--orb) 55%,transparent);} 50%{ box-shadow:0 0 90px 30px color-mix(in srgb,var(--orb) 70%,transparent);} }
+      .orb .shades { position: absolute; inset: 0; display: grid; place-items: center; font-size: 4.6rem; opacity: 0; transform: scale(.4) rotate(-12deg); transition: opacity .5s, transform .5s var(--ease-chill); pointer-events: none; }
+      .orb.cool .shades { opacity: 1; transform: scale(1) rotate(0); }
+
+      /* stars — only visible at night */
+      .stars { position: absolute; inset: 0; z-index: 2; opacity: 0; transition: opacity 1s; pointer-events: none; }
+      :root[data-theme="dark"] .stars { opacity: 1; }
+      @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .stars { opacity: 1; } }
+
+      /* layered hills */
+      .hill { position: absolute; left: -5%; width: 110%; z-index: 4; transition: background .8s var(--ease-chill); }
+      .hill.far  { bottom: 20%; height: 34%; background: var(--hill-far);  border-radius: 50% 50% 0 0 / 90% 90% 0 0; opacity: .9; }
+      .hill.mid  { bottom: 10%; height: 30%; background: var(--hill-mid);  border-radius: 46% 54% 0 0 / 100% 100% 0 0; }
+      .hill.near { bottom: 0;   height: 22%; background: var(--hill-near); border-radius: 50% 50% 0 0 / 80% 80% 0 0; z-index: 8; }
+
+      /* little sun-glint fence + cactus on the near hill */
+      .foreprops { position: absolute; bottom: 0; left: 0; width: 100%; height: 24%; z-index: 9; pointer-events: none; }
+      .cactus { position: absolute; bottom: 6%; font-size: clamp(2.2rem, 6vw, 3.4rem); filter: drop-shadow(0 3px 0 rgba(0,0,0,.15)); }
+      .cactus.a { left: 8%; }
+      .cactus.b { right: 12%; bottom: 9%; font-size: clamp(1.6rem,4vw,2.4rem); }
+
+      /* the hanging wooden sign — the wordmark */
+      .signwrap { position: relative; z-index: 12; text-align: center; margin-top: -6vh; padding: 0 1rem; }
+      .ropes { display: flex; justify-content: center; gap: min(46vw, 420px); height: 46px; }
+      .ropes span { width: 5px; height: 100%; background: repeating-linear-gradient(45deg, #b98a4e 0 5px, #9c6f38 5px 10px); border-radius: 3px; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+      .sign {
+        display: inline-block; transform-origin: top center;
+        padding: clamp(.7rem,2.5vw,1.4rem) clamp(1.2rem,5vw,3rem);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.14)),
+          repeating-linear-gradient(90deg, #7a4a26 0 6px, #83512b 6px 12px, #6e421f 12px 18px);
+        border: 4px solid #5b3618;
+        border-radius: 10px;
+        box-shadow: 0 18px 40px var(--shadow), inset 0 0 0 2px rgba(0,0,0,.18), inset 0 2px 6px rgba(255,255,255,.12);
+        animation: sway 7s ease-in-out infinite;
+        cursor: pointer;
+      }
+      .sign:hover { animation-play-state: paused; }
+      .sign.swing { animation: bigswing 2.4s var(--ease-chill); }
+      @keyframes sway { 0%,100%{ transform: rotate(-1.1deg);} 50%{ transform: rotate(1.1deg);} }
+      @keyframes bigswing { 0%{transform:rotate(-9deg);} 30%{transform:rotate(7deg);} 55%{transform:rotate(-4deg);} 78%{transform:rotate(2deg);} 100%{transform:rotate(0);} }
+      .sign .kicker { font-family: var(--mono); font-size: clamp(.6rem,1.6vw,.78rem); letter-spacing: .5em; text-transform: uppercase; color: #f3d9a6; margin-left: .5em; }
+      .sign h1 {
+        color: #f6e7c4; font-size: clamp(2.6rem, 11vw, 7rem); letter-spacing: .02em; text-transform: uppercase;
+        text-shadow: 0 2px 0 #2c1a0c, 0 -1px 0 rgba(255,255,255,.15), 1px 3px 5px rgba(0,0,0,.4);
+        margin: .1em 0;
+      }
+      .sign .est { font-family: var(--mono); font-size: clamp(.58rem,1.5vw,.74rem); letter-spacing: .3em; color: #e7c891; }
+
+      .scrollcue { position: absolute; bottom: 1.4rem; left: 50%; transform: translateX(-50%); z-index: 12; font-family: var(--mono); font-size: .7rem; letter-spacing: .3em; text-transform: uppercase; opacity: .7; animation: bob 3s ease-in-out infinite; color: color-mix(in srgb, var(--ink) 85%, #fff); }
+      @keyframes bob { 0%,100%{ transform: translate(-50%,0);} 50%{ transform: translate(-50%,8px);} }
+
+      /* tumbleweeds roll across everything, slowly (it's chill) */
+      .tumble { position: fixed; bottom: 4vh; left: -8vw; z-index: 30; font-size: 2rem; pointer-events: none; animation: roll linear forwards; filter: drop-shadow(0 4px 3px rgba(0,0,0,.2)); }
+      @keyframes roll { from { transform: translateX(0) rotate(0);} to { transform: translateX(120vw) rotate(1800deg);} }
+
+      /* ---------- generic section ---------- */
+      main { position: relative; z-index: 20; }
+      .band { padding: clamp(3.5rem, 9vw, 7rem) clamp(1.2rem, 6vw, 3rem); }
+      .wrap { max-width: 1080px; margin: 0 auto; }
+      .eyebrow { font-family: var(--mono); font-size: .76rem; letter-spacing: .34em; text-transform: uppercase; color: var(--wheat-deep); display: inline-flex; align-items: center; gap: .6rem; }
+      .eyebrow::before { content: ""; width: 26px; height: 2px; background: var(--wheat-deep); display: inline-block; }
+      h2.title { font-size: clamp(2rem, 6vw, 3.4rem); text-transform: uppercase; letter-spacing: .01em; margin: .5rem 0 1rem; }
+      .lead { font-size: clamp(1.05rem, 2.4vw, 1.3rem); color: var(--ink-soft); max-width: 60ch; }
+
+      /* reveal on scroll */
+      .reveal { opacity: 0; transform: translateY(26px); transition: opacity .9s var(--ease-chill), transform .9s var(--ease-chill); }
+      .reveal.in { opacity: 1; transform: none; }
+
+      /* ---------- motto rope banner ---------- */
+      .motto { background: var(--saddle-dk); color: #f4ead0; text-align: center; position: relative; }
+      .motto .wrap { padding-block: .5rem; }
+      .rope-edge { height: 12px; width: 100%; background: repeating-linear-gradient(-45deg, var(--wheat) 0 10px, var(--wheat-deep) 10px 20px); }
+      .motto h2 { font-size: clamp(1.5rem, 4.6vw, 2.9rem); text-transform: uppercase; color: #ffe6ad; text-shadow: 0 2px 0 #000; }
+      .motto p { font-family: var(--mono); letter-spacing: .12em; color: #e9cf9f; margin-top: 1rem; }
+      .brandmark-iron { font-size: 2.4rem; display: inline-block; animation: breathe 6s ease-in-out infinite; }
+
+      /* ---------- marquee ---------- */
+      .marquee { overflow: hidden; background: var(--wheat); color: var(--saddle-dk); border-block: 3px solid var(--saddle-dk); }
+      .marquee-track { display: inline-flex; gap: 2.4rem; white-space: nowrap; padding: .55rem 0; font-family: var(--display); text-transform: uppercase; letter-spacing: .08em; font-size: 1.05rem; animation: scrollx 26s linear infinite; }
+      .marquee:hover .marquee-track { animation-play-state: paused; }
+      .marquee-track span::after { content: "✦"; margin-left: 2.4rem; opacity: .6; }
+      @keyframes scrollx { from { transform: translateX(0);} to { transform: translateX(-50%);} }
+
+      /* ---------- team ---------- */
+      .team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: clamp(1rem, 3vw, 1.8rem); margin-top: 2.6rem; }
+      .badgecard {
+        position: relative; background: var(--card); border: 2px solid var(--line); border-radius: 14px;
+        padding: 1.6rem 1.3rem 1.4rem; text-align: center; overflow: hidden;
+        box-shadow: 0 10px 24px var(--shadow); transition: transform .5s var(--ease-chill), box-shadow .5s;
+      }
+      .badgecard::before { content: ""; position: absolute; inset: 6px; border: 1px dashed var(--line); border-radius: 10px; pointer-events: none; }
+      .badgecard:hover { transform: translateY(-8px) rotate(-.6deg); box-shadow: 0 22px 40px var(--shadow); }
+      .avatar {
+        width: 92px; height: 92px; margin: 0 auto .9rem; border-radius: 50%;
+        display: grid; place-items: center; font-size: 2.8rem;
+        background: radial-gradient(circle at 40% 35%, var(--orb-glow), var(--wheat));
+        box-shadow: inset 0 0 0 4px var(--saddle-dk), 0 6px 14px var(--shadow);
+      }
+      .badgecard .role { font-family: var(--mono); font-size: .72rem; letter-spacing: .22em; text-transform: uppercase; color: var(--terra); font-weight: 700; }
+      .badgecard h3 { font-size: 1.5rem; margin: .3rem 0 .1rem; text-transform: uppercase; }
+      .badgecard .title { font-size: .92rem; color: var(--ink-soft); min-height: 2.6em; }
+      .badgecard .bio { font-size: .84rem; color: var(--ink-soft); margin-top: .7rem; border-top: 1px solid var(--line); padding-top: .7rem; }
+      .badgecard .chillstat { margin-top: .8rem; font-family: var(--mono); font-size: .74rem; letter-spacing: .05em; color: var(--wheat-deep); }
+      .badgecard .pin { position: absolute; top: .7rem; right: .8rem; font-size: 1rem; opacity: .5; }
+
+      /* ---------- ledger / backlog counter ---------- */
+      .ledger { background: var(--parch-2); }
+      .ledger-panel {
+        background: var(--saddle-dk); color: #f4ead0; border-radius: 16px; padding: clamp(1.6rem,5vw,3rem);
+        box-shadow: 0 18px 44px var(--shadow); border: 3px solid #5b3618; position: relative; overflow: hidden;
+      }
+      .ledger-panel::after { content: "★ ★ ★"; position: absolute; top: .8rem; right: 1.2rem; letter-spacing: .5em; color: var(--wheat); opacity: .5; font-size: .8rem; }
+      .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 1.4rem 1rem; margin-top: 1.4rem; }
+      .stat { text-align: center; }
+      .stat .num { font-family: var(--display); font-size: clamp(2rem, 6vw, 3.2rem); color: #ffe0a0; font-variant-numeric: tabular-nums; letter-spacing: .01em; line-height: 1; }
+      .stat .lbl { font-family: var(--mono); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: #e2c48f; margin-top: .5rem; }
+      .backlog-note { font-family: var(--mono); font-size: .8rem; color: #e9cf9f; margin-top: 1.6rem; text-align: center; border-top: 1px dashed rgba(244,234,208,.3); padding-top: 1.2rem; }
+      .chillbar { height: 16px; border-radius: 10px; background: rgba(0,0,0,.3); overflow: hidden; margin-top: .5rem; border: 1px solid rgba(255,255,255,.15); }
+      .chillbar > i { display: block; height: 100%; width: 98%; background: repeating-linear-gradient(90deg, var(--wheat) 0 12px, var(--wheat-deep) 12px 24px); animation: nudge 5s ease-in-out infinite; }
+      @keyframes nudge { 0%,100%{ width: 97%;} 50%{ width: 99%;} }
+
+      /* ---------- values ---------- */
+      .values-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 1.4rem; margin-top: 2.4rem; }
+      .value { background: var(--card); border: 2px solid var(--line); border-left: 6px solid var(--wheat); border-radius: 12px; padding: 1.4rem 1.3rem; transition: transform .4s var(--ease-chill); }
+      .value:hover { transform: translateX(4px); }
+      .value .ic { font-size: 2rem; }
+      .value h3 { font-size: 1.2rem; margin: .5rem 0 .3rem; text-transform: uppercase; letter-spacing: .02em; }
+      .value p { font-size: .92rem; color: var(--ink-soft); margin: 0; }
+
+      /* ---------- hire CTA ---------- */
+      .hire { text-align: center; background: linear-gradient(180deg, var(--parch), var(--parch-2)); }
+      .poster {
+        display: inline-block; max-width: 640px; margin: 0 auto; text-align: center;
+        background: var(--card); border: 3px double var(--saddle); border-radius: 8px;
+        padding: clamp(1.6rem,5vw,2.8rem); box-shadow: 0 14px 34px var(--shadow); transform: rotate(-.7deg);
+      }
+      .poster .wanted { font-family: var(--display); text-transform: uppercase; letter-spacing: .3em; color: var(--terra); font-size: .9rem; }
+      .poster h2 { font-size: clamp(1.8rem,6vw,3rem); text-transform: uppercase; margin: .4rem 0; }
+      .poster p { color: var(--ink-soft); }
+      .btn {
+        display: inline-block; margin-top: 1.4rem; text-decoration: none; cursor: pointer;
+        font-family: var(--display); text-transform: uppercase; letter-spacing: .08em; font-size: 1.05rem;
+        color: #f4ead0; background: var(--terra); padding: .85rem 2rem; border-radius: 40px;
+        border: 2px solid var(--saddle-dk); box-shadow: 0 6px 0 var(--saddle-dk);
+        transition: transform .2s var(--ease-chill), box-shadow .2s;
+      }
+      .btn:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--saddle-dk); }
+      .btn.ghost { background: transparent; color: var(--ink); box-shadow: 0 6px 0 var(--line); border-color: var(--line); }
+      .cta-row { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+
+      /* ---------- footer night ---------- */
+      footer { background: var(--saddle-dk); color: #e9d7b5; text-align: center; padding: clamp(2.5rem,7vw,4rem) 1.5rem 2.5rem; position: relative; }
+      footer .fbrand { font-family: var(--display); font-size: 1.8rem; text-transform: uppercase; letter-spacing: .06em; color: #ffe6ad; }
+      footer .crew { font-family: var(--mono); font-size: .78rem; letter-spacing: .1em; color: #cbb187; margin-top: .8rem; line-height: 1.9; }
+      footer .fine { font-size: .74rem; color: #a58a63; margin-top: 1.6rem; }
+      footer a { color: #ffe6ad; }
+
+      /* toast for easter eggs */
+      .toast { position: fixed; left: 50%; bottom: 2rem; transform: translate(-50%, 140%); z-index: 60;
+        background: var(--saddle-dk); color: #ffe6ad; font-family: var(--mono); font-size: .85rem; letter-spacing: .05em;
+        padding: .8rem 1.4rem; border-radius: 40px; border: 2px solid var(--wheat); box-shadow: 0 10px 30px rgba(0,0,0,.4);
+        transition: transform .5s var(--ease-chill); pointer-events: none; }
+      .toast.show { transform: translate(-50%, 0); }
+
+      /* MAXIMUM CHILL mode slows the whole ranch down */
+      body.maxchill * { animation-duration: 3s !important; transition-duration: 1.4s !important; }
+      body.maxchill { filter: saturate(1.15) brightness(1.02); }
+
+      /* Chief Napping Officer easter egg */
+      .cno { position: fixed; right: 1rem; bottom: -80px; z-index: 55; font-size: 2.6rem; cursor: pointer; transition: bottom .7s var(--ease-chill); user-select: none; }
+      .cno.up { bottom: .4rem; }
+      .cno .zzz { position: absolute; top: -10px; right: -6px; font-size: 1rem; animation: floatz 3s ease-in-out infinite; }
+      @keyframes floatz { 0%{ opacity:0; transform: translateY(0);} 50%{opacity:1;} 100%{ opacity:0; transform: translateY(-14px);} }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+        .reveal { opacity: 1; transform: none; }
+      }
+    </style>
+
+    <!-- ========================= TOP BAR ========================= -->
+    <header class="topbar">
+      <div class="brand" id="brand" title="Give it a few clicks…">
+        <span class="badge">🤠</span> Chill&nbsp;Farm
+      </div>
+      <nav class="navlinks">
+        <a href="#crew">The Crew</a>
+        <a href="#backlog">The Backlog</a>
+        <a href="#values">How We Chill</a>
+        <a href="#hire" class="hire-link">We're Hiring</a>
+        <button class="theme-toggle" id="themeBtn" aria-label="Change the time of day" title="Sunrise / Sunset">🌤️</button>
+      </nav>
+    </header>
+
+    <!-- ========================= HERO ========================= -->
+    <section class="hero" id="top">
+      <div class="sky"></div>
+      <canvas class="stars" id="stars"></canvas>
+      <div class="orb" id="orb" title="Howdy, sunshine">
+        <span class="shades">😎</span>
+      </div>
+      <div class="hill far"></div>
+      <div class="hill mid"></div>
+      <div class="hill near"></div>
+      <div class="foreprops">
+        <span class="cactus a">🌵</span>
+        <span class="cactus b">🌵</span>
+      </div>
+
+      <div class="signwrap">
+        <div class="ropes"><span></span><span></span></div>
+        <div class="sign" id="sign" title="Go on, give it a push">
+          <div class="kicker">— Est. Whenever We Felt Like It —</div>
+          <h1>Chill Farm</h1>
+          <div class="est">only-chill.com · a working ranch for professional relaxers</div>
+        </div>
+      </div>
+
+      <div class="scrollcue">scroll gently ↓</div>
+    </section>
+
+    <main>
+      <!-- ===================== MOTTO ===================== -->
+      <section class="motto" id="motto">
+        <div class="rope-edge"></div>
+        <div class="wrap band reveal">
+          <div class="brandmark-iron">🔥</div>
+          <h2>We're Hiring People to Chill</h2>
+          <p>…because we've got <strong>so much chill in the backlog</strong>.</p>
+        </div>
+        <div class="rope-edge"></div>
+      </section>
+
+      <!-- ===================== MARQUEE ===================== -->
+      <div class="marquee" aria-hidden="true">
+        <div class="marquee-track" id="mtrack">
+          <span>Zero Deadlines</span><span>Unlimited Hammocks</span><span>Siesta-Driven Development</span><span>Nap Equity</span><span>Bring Your Own Vibe</span><span>Sunset O'Clock</span>
+        </div>
+      </div>
+
+      <!-- ===================== THE CREW ===================== -->
+      <section class="band" id="crew">
+        <div class="wrap">
+          <div class="reveal">
+            <span class="eyebrow">The Chief Chillers</span>
+            <h2 class="title">Meet the C-Suite of Chill</h2>
+            <p class="lead">Four seasoned professionals, zero urgency. Every one of them a "Chilling Officer" — because at Chill Farm the "C" was never negotiable.</p>
+          </div>
+
+          <div class="team-grid">
+            <article class="badgecard reveal">
+              <span class="pin">📌</span>
+              <div class="avatar">🧑‍🌾</div>
+              <div class="role">CEO</div>
+              <h3>Aman Patel</h3>
+              <div class="title">Chilling Employee Officer</div>
+              <div class="bio">Founded the farm on a hammock and never got up. Sets the vision, mostly by staring at clouds.</div>
+              <div class="chillstat">Chill Level: ████████░░ 8.9 / 10</div>
+            </article>
+
+            <article class="badgecard reveal">
+              <span class="pin">📌</span>
+              <div class="avatar">🛠️</div>
+              <div class="role">CTO</div>
+              <h3>Cody Beeston</h3>
+              <div class="title">Chilling Technology Officer</div>
+              <div class="bio">Automated the entire ranch so nobody has to lift a finger. His deploys ship themselves while he snoozes.</div>
+              <div class="chillstat">Chill Level: █████████░ 9.4 / 10</div>
+            </article>
+
+            <article class="badgecard reveal">
+              <span class="pin">📌</span>
+              <div class="avatar">🧢</div>
+              <div class="role">COO</div>
+              <h3>Joseph Taylor</h3>
+              <div class="title">Chilling Operations Officer</div>
+              <div class="bio">Keeps operations running smoothly by keeping them running slowly. A firm believer in "it'll get done… eventually."</div>
+              <div class="chillstat">Chill Level: ████████░░ 8.6 / 10</div>
+            </article>
+
+            <article class="badgecard reveal">
+              <span class="pin">📌</span>
+              <div class="avatar">💰</div>
+              <div class="role">CFO</div>
+              <h3>Elias Tores</h3>
+              <div class="title">Chilling Financial Officer</div>
+              <div class="bio">Balances the books and the vibes. Invests exclusively in lemonade, sunshine, and comfortable furniture.</div>
+              <div class="chillstat">Chill Level: █████████░ 9.1 / 10</div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== BACKLOG LEDGER ===================== -->
+      <section class="band ledger" id="backlog">
+        <div class="wrap">
+          <div class="reveal">
+            <span class="eyebrow">The Chill Ledger</span>
+            <h2 class="title">So Much Chill in the Backlog</h2>
+            <p class="lead">Our books are open. This is a live tally of everything the ranch has left to chill through. Frankly, we're behind.</p>
+          </div>
+
+          <div class="ledger-panel reveal">
+            <div class="stat-row">
+              <div class="stat"><div class="num" id="c1" data-target="1428506">0</div><div class="lbl">Units of Chill in Backlog</div></div>
+              <div class="stat"><div class="num" id="c2" data-target="0">0</div><div class="lbl">Deadlines Met (On Purpose)</div></div>
+              <div class="stat"><div class="num" id="c3" data-target="97">0</div><div class="lbl">% Hammock Uptime</div></div>
+              <div class="stat"><div class="num" id="c4" data-target="4">0</div><div class="lbl">Naps Currently In Progress</div></div>
+            </div>
+            <div class="chillbar" title="Backlog burn-down (we are not burning it down)"><i></i></div>
+            <div class="backlog-note">At current pace, the backlog will be cleared by approximately <strong>never</strong>. We consider this job security.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== VALUES ===================== -->
+      <section class="band" id="values">
+        <div class="wrap">
+          <div class="reveal">
+            <span class="eyebrow">The Ranch Code</span>
+            <h2 class="title">How We Chill</h2>
+            <p class="lead">Four principles branded into every fence post on the property.</p>
+          </div>
+          <div class="values-grid">
+            <div class="value reveal"><div class="ic">🌅</div><h3>Sunset-Driven</h3><p>We work to the rhythm of the light. When the sun clocks out, so do we. No exceptions, no overtime, no email after golden hour.</p></div>
+            <div class="value reveal"><div class="ic">🪑</div><h3>Comfort First</h3><p>Every chair reclines. Every deadline is a suggestion. If a task can't be done from a hammock, we question whether it needs doing.</p></div>
+            <div class="value reveal"><div class="ic">🤝</div><h3>Radical Ease</h3><p>We over-communicate the vibes and under-commit the timelines. Honesty about how relaxed we are is our whole culture.</p></div>
+            <div class="value reveal"><div class="ic">🌾</div><h3>Slow & Steady</h3><p>The backlog isn't a problem to solve — it's a pasture to graze. We chill through it one unhurried afternoon at a time.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== HIRE ===================== -->
+      <section class="band hire" id="hire">
+        <div class="wrap reveal">
+          <div class="poster">
+            <div class="wanted">✦ Wanted ✦</div>
+            <h2>Professional Chillers</h2>
+            <p>No experience required — in fact, we'd prefer you've never hustled a day in your life. Must supply own sunglasses. Ability to nap under pressure a plus.</p>
+            <p style="font-family:var(--mono);font-size:.8rem;letter-spacing:.1em;margin-top:1rem;">STATUS: <strong style="color:var(--terra)">ALWAYS OPEN</strong> · SALARY: PAID IN SUNSETS</p>
+            <div class="cta-row">
+              <a class="btn" href="mailto:howdy@only-chill.com?subject=I%20would%20like%20to%20chill&body=Dear%20Chill%20Farm%2C%20I%20am%20extremely%20relaxed%20and%20available%20immediately.">Apply to Chill</a>
+              <a class="btn ghost" href="#top">Take the Tour Again</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===================== FOOTER ===================== -->
+    <footer>
+      <div class="fbrand">🤠 Chill Farm</div>
+      <div class="crew">
+        Aman Patel · CEO &nbsp;|&nbsp; Cody Beeston · CTO<br>
+        Joseph Taylor · COO &nbsp;|&nbsp; Elias Tores · CFO
+      </div>
+      <div class="fine">
+        only-chill.com — no cattle were rushed in the making of this ranch.<br>
+        © <span id="yr"></span> Chill Farm. All rights relaxed.
+      </div>
+    </footer>
+
+    <div class="toast" id="toast"></div>
+    <div class="cno" id="cno" title="The Chief Napping Officer">🐈 <span class="zzz">💤</span></div>
+
+    <script>
+    (function(){
+      "use strict";
+      var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      var toastEl = document.getElementById("toast"), toastT;
+      function toast(msg){
+        toastEl.textContent = msg; toastEl.classList.add("show");
+        clearTimeout(toastT); toastT = setTimeout(function(){ toastEl.classList.remove("show"); }, 2600);
+      }
+
+      document.getElementById("yr").textContent = new Date().getFullYear();
+
+      /* ---------- theme toggle: change the time of day ---------- */
+      var root = document.documentElement, tBtn = document.getElementById("themeBtn");
+      function isDark(){
+        var t = root.getAttribute("data-theme");
+        if (t) return t === "dark";
+        return matchMedia("(prefers-color-scheme: dark)").matches;
+      }
+      function syncIcon(){ tBtn.textContent = isDark() ? "🌙" : "🌤️"; }
+      tBtn.addEventListener("click", function(){
+        var next = isDark() ? "light" : "dark";
+        root.setAttribute("data-theme", next);
+        syncIcon(); startStars();
+        toast(next === "dark" ? "🌙 Sun's down. Extra chill unlocked." : "🌤️ Mornin'. Back to the good chill.");
+      });
+      syncIcon();
+
+      /* ---------- starfield (night only) ---------- */
+      var canvas = document.getElementById("stars"), ctx = canvas.getContext("2d"), starTimer;
+      function startStars(){
+        if (!isDark()) { ctx && ctx.clearRect(0,0,canvas.width,canvas.height); return; }
+        var hero = document.getElementById("top");
+        canvas.width = hero.clientWidth; canvas.height = hero.clientHeight;
+        var stars = [];
+        for (var i=0;i<90;i++) stars.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height*0.7, r: Math.random()*1.4+0.3, p: Math.random()*6 });
+        var t0 = 0;
+        function draw(t){
+          if (!isDark()) return;
+          ctx.clearRect(0,0,canvas.width,canvas.height);
+          for (var i=0;i<stars.length;i++){
+            var s = stars[i], tw = reduce ? 0.85 : (0.6 + 0.4*Math.sin(t/700 + s.p));
+            ctx.globalAlpha = tw; ctx.fillStyle = "#fdf5d8";
+            ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.28); ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+          if (!reduce) starTimer = requestAnimationFrame(draw);
+        }
+        cancelAnimationFrame(starTimer);
+        draw(0);
+      }
+      addEventListener("resize", startStars);
+      startStars();
+
+      /* ---------- scroll reveals ---------- */
+      var io = new IntersectionObserver(function(entries){
+        entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target); } });
+      }, { threshold: .12 });
+      document.querySelectorAll(".reveal").forEach(function(el){ io.observe(el); });
+
+      /* duplicate marquee content for seamless loop */
+      var mt = document.getElementById("mtrack");
+      if (mt) mt.innerHTML += mt.innerHTML;
+
+      /* ---------- animated counters (fire when ledger visible) ---------- */
+      var counted = false;
+      function runCounters(){
+        if (counted) return; counted = true;
+        document.querySelectorAll(".num").forEach(function(el){
+          var target = +el.getAttribute("data-target"), start = null, dur = 2200;
+          function step(ts){
+            if(!start) start = ts;
+            var p = Math.min((ts-start)/dur, 1), eased = 1-Math.pow(1-p,3);
+            el.textContent = Math.floor(eased*target).toLocaleString();
+            if(p<1) requestAnimationFrame(step); else el.textContent = target.toLocaleString();
+          }
+          if (reduce) el.textContent = target.toLocaleString(); else requestAnimationFrame(step);
+        });
+      }
+      var lio = new IntersectionObserver(function(entries){
+        entries.forEach(function(e){ if(e.isIntersecting) runCounters(); });
+      }, { threshold: .4 });
+      var ledgerEl = document.querySelector(".ledger-panel"); if (ledgerEl) lio.observe(ledgerEl);
+
+      /* ---------- tumbleweeds roll by, slowly ---------- */
+      function tumble(){
+        if (reduce || document.hidden) return;
+        var t = document.createElement("div");
+        t.className = "tumble"; t.textContent = "🌾";
+        t.style.bottom = (2 + Math.random()*10) + "vh";
+        t.style.fontSize = (1.4 + Math.random()*1.6) + "rem";
+        var dur = 14 + Math.random()*10;
+        t.style.animationDuration = dur + "s";
+        document.body.appendChild(t);
+        setTimeout(function(){ t.remove(); }, dur*1000 + 200);
+      }
+      setTimeout(tumble, 2500);
+      setInterval(function(){ if(Math.random()>.3) tumble(); }, 9000);
+
+      /* ---------- EASTER EGGS ---------- */
+
+      /* 1. the sun/moon puts on shades after a few clicks */
+      var orb = document.getElementById("orb"), orbClicks = 0;
+      orb.addEventListener("click", function(){
+        orbClicks++;
+        if (orbClicks === 5){ orb.classList.add("cool"); toast("😎 The sun agrees. Stay cool."); }
+        else if (orbClicks > 5){ tumble(); }
+        else { toast(["Howdy ☀️","Nice and warm.","Keep it comin'…","One more…"][orbClicks-1] || "☀️"); }
+      });
+
+      /* 2. push the sign and it swings */
+      var sign = document.getElementById("sign");
+      sign.addEventListener("click", function(){
+        sign.classList.remove("swing"); void sign.offsetWidth; sign.classList.add("swing");
+      });
+
+      /* 3. click the brand 5x -> Chief Napping Officer appears */
+      var brand = document.getElementById("brand"), bClicks = 0, cno = document.getElementById("cno"), bT;
+      brand.addEventListener("click", function(){
+        bClicks++; clearTimeout(bT); bT = setTimeout(function(){ bClicks = 0; }, 1200);
+        if (bClicks >= 5){ cno.classList.add("up"); toast("🐈 The Chief Napping Officer has awoken. Briefly."); bClicks = 0; }
+      });
+      cno.addEventListener("click", function(){ toast("💤 CNO says: back to nap. Company policy."); setTimeout(function(){ cno.classList.remove("up"); }, 1800); });
+
+      /* 4. type "chill" anywhere */
+      var buf = "";
+      addEventListener("keydown", function(e){
+        if (e.key && e.key.length === 1) buf = (buf + e.key.toLowerCase()).slice(-14);
+
+        if (buf.indexOf("chill") > -1){ buf = ""; for (var i=0;i<6;i++) setTimeout(tumble, i*160); toast("🌾 Maximum tumbleweeds. Very chill of you."); }
+
+        /* 5. Konami code -> MAXIMUM CHILL mode */
+        konami(e.key);
+      });
+
+      var kseq = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"], kpos = 0;
+      function konami(key){
+        if (!key) return;
+        key = (key.length === 1) ? key.toLowerCase() : key;
+        if (key === kseq[kpos]){ kpos++; if (kpos === kseq.length){ kpos = 0; maxChill(); } }
+        else { kpos = (key === kseq[0]) ? 1 : 0; }
+      }
+      var maxOn = false;
+      function maxChill(){
+        maxOn = !maxOn;
+        document.body.classList.toggle("maxchill", maxOn);
+        toast(maxOn ? "🧘 MAXIMUM CHILL ENGAGED. Everything… slow… down…" : "⏱️ Back to regular chill.");
+        if (maxOn && !reduce){ for (var i=0;i<10;i++) setTimeout(tumble, i*220); }
+      }
+
+      /* 6. console note for the curious */
+      try {
+        console.log("%c🤠 Welcome to Chill Farm","font:700 22px Rockwell,serif;color:#c15a34;");
+        console.log("%cWe're hiring people to chill — we've got so much chill in the backlog.\nTry the Konami code. Try typing 'chill'. Click the sun five times.\nhowdy@only-chill.com","font:13px monospace;color:#7a4a26;");
+      } catch(_){}
+    })();
+    </script>
