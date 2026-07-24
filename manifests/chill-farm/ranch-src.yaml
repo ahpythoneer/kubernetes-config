@@ -44,12 +44,12 @@ data:
       try {
         const res = await fetch(OLLAMA_URL + '/api/generate', {
           method: 'POST', signal: ctl.signal, headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ model: OLLAMA_MODEL, system: sys, prompt: user, stream: false, keep_alive: '30m', options: { num_predict: 44, temperature: 1.0 } }),
+          body: JSON.stringify({ model: OLLAMA_MODEL, system: sys, prompt: user, stream: false, keep_alive: '30m', options: { num_predict: 60, temperature: 1.0 } }),
         });
         if (!res.ok) return null;
         const j = await res.json();
         let t = (j.response || '').trim().replace(/^["'\s]+|["'\s]+$/g, '').split('\n')[0].trim();
-        if (t.length > 100) t = t.slice(0, 98) + '…';
+        if (t.length > 140) t = t.slice(0, 138) + '…';
         return t || null;
       } catch (e) { return null; } finally { clearTimeout(to); aiInFlight--; }
     }
@@ -235,6 +235,10 @@ data:
           lastHostAt = Date.now();
           hostSay(`A guest named ${c.name} just said: "${text}". Give a warm, chill, friendly one-line reply.`);
         }
+      } else if (m.t === 'order') {
+        if (Date.now() - (c.lastOrder || 0) < 8000) return;      // per-guest cooldown
+        c.lastOrder = Date.now(); lastHostAt = Date.now();
+        hostSay(`A guest named ${c.name} bellies up and orders a drink. Invent a chill non-alcoholic ranch mocktail — a fun name and a one-line description — addressed to ${c.name}. Under 26 words.`);
       }
     }
 

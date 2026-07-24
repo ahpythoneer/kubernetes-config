@@ -18,7 +18,7 @@ spec:
       labels:
         app: chill-ranch
       annotations:
-        chill-ranch/src-rev: "3"
+        chill-ranch/src-rev: "4"
     spec:
       containers:
       - name: ranch

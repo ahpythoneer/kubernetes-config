@@ -1362,6 +1362,20 @@ data:
       .cpanel .ht.on{border-color:var(--wheat);background:rgba(217,164,65,.25);}
       .cpanel .done{margin-top:.8rem;width:100%;font-family:var(--display);text-transform:uppercase;letter-spacing:.05em;
         background:var(--terra);color:#f4ead0;border:2px solid var(--saddle-dk);border-radius:20px;padding:.5rem;cursor:pointer;}
+
+      .askbar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9;display:flex;gap:.4rem;align-items:center;
+        background:rgba(30,20,12,.92);border:2px solid var(--wheat);border-radius:30px;padding:.4rem .5rem .4rem .9rem;
+        backdrop-filter:blur(6px);box-shadow:0 12px 30px rgba(0,0,0,.5);max-width:94vw;font-family:var(--mono);color:#ffe6ad;}
+      .askbar[hidden]{display:none;}
+      .askbar #askLabel{white-space:nowrap;font-size:.72rem;letter-spacing:.06em;}
+      .askbar input{font:inherit;font-size:16px;border:none;outline:none;background:rgba(251,244,226,.96);color:#33261a;border-radius:20px;padding:.45rem .7rem;width:min(44vw,240px);}
+      .askbar button{font-family:var(--display);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;border:none;border-radius:20px;padding:.45rem .8rem;background:var(--terra);color:#f4ead0;}
+      .askbar #askClose{background:transparent;color:#ffe6ad;padding:.3rem .5rem;font-family:var(--mono);}
+      .mbanner{position:fixed;top:58px;left:50%;transform:translateX(-50%);z-index:8;background:var(--saddle-dk);color:#ffe6ad;
+        border:2px solid var(--wheat);border-radius:30px;padding:.4rem 1.1rem;font-family:var(--mono);font-size:.8rem;letter-spacing:.04em;
+        box-shadow:0 10px 26px rgba(0,0,0,.45);animation:mb .5s var(--ease);}
+      .mbanner[hidden]{display:none;}
+      @keyframes mb{from{opacity:0;transform:translate(-50%,-8px);}to{opacity:1;transform:translate(-50%,0);}}
     </style>
 
     <canvas id="c"></canvas>
@@ -1393,7 +1407,16 @@ data:
       <button class="done" id="cDone">done</button>
     </div>
 
-    <div class="hint" id="hint">move your pointer (or drag on touch) — your 🤠 sheep ambles over · stand still to nap · tap to baa</div>
+    <div class="mbanner" id="mbanner" hidden>📋 <b id="mtopic"></b></div>
+
+    <div class="askbar" id="askbar" hidden>
+      <span id="askLabel">Ask</span>
+      <input id="askIn" maxlength="140" placeholder="type your question…" autocomplete="off" enterkeyhint="send" />
+      <button id="askSend" type="button">ask</button>
+      <button id="askClose" type="button" aria-label="close">✕</button>
+    </div>
+
+    <div class="hint" id="hint">move your pointer (or drag) — your 🤠 sheep ambles over · tap an exec 👔 to ask them anything · tap grass to baa</div>
 
     <div class="conn" id="conn"><div><div class="big">🌾 finding the meadow…</div><div id="connMsg">connecting you to the pasture</div></div></div>
 
@@ -1409,6 +1432,8 @@ data:
       var grass = new Array(COLS*ROWS).fill(6);
       var baas = [];                   // {x,y,t}
       var execBubbles = {};            // id -> {text, t}  (AI banter above the exec sheep)
+      var qBubbles = {};               // id -> {text, t}  (visitor questions above the asker)
+      var askTarget = null;            // exec id currently being asked
       var pointer = { x: W/2, y: H/2, active:false };
       var meadowHour = 13;                   // shared meadow time-of-day (0-24), from server
       var weather = 0;                       // 0 clear, 1 cloudy, 2 rain (shared, from server)
@@ -1507,6 +1532,13 @@ data:
           var bs = sheep[m.id]; if (bs) baas.push({ id:m.id, t: performance.now() });
         } else if (m.t === "say"){
           execBubbles[m.id] = { text: m.text, t: performance.now() };
+        } else if (m.t === "q"){
+          qBubbles[m.id] = { text: m.text, t: performance.now() };
+        } else if (m.t === "meeting"){
+          document.getElementById("mtopic").textContent = "Board Meeting — " + m.topic;
+          document.getElementById("mbanner").hidden = false;
+        } else if (m.t === "meeting-end"){
+          document.getElementById("mbanner").hidden = true;
         }
       }
       connect();
@@ -1522,8 +1554,40 @@ data:
         hideHint();
       }
       addEventListener("pointermove", setPointerFromEvent, { passive:true });
-      addEventListener("pointerdown", function(e){ setPointerFromEvent(e); baa(); });
+      addEventListener("pointerdown", function(e){
+        if (e.target && e.target.closest && e.target.closest(".askbar, .cpanel, .hud")) return;  // ignore UI taps
+        setPointerFromEvent(e);
+        var hit = execAtScreen(e);
+        if (hit != null) openAsk(hit); else baa();
+      });
       function baa(){ if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"baa" })); }
+
+      // find an exec sheep near a tap/click (screen CSS pixels)
+      function execAtScreen(e){
+        var px = (e.touches ? e.touches[0].clientX : e.clientX), py = (e.touches ? e.touches[0].clientY : e.clientY);
+        var best = null, bestD = 1e9;
+        for (var id in sheep){ var info = roster[id]; if (!info || !info.role) continue;
+          var sx = toScreenX(sheep[id].rx)/view.dpr, sy = toScreenY(sheep[id].ry)/view.dpr;
+          var d = Math.hypot(px - sx, py - sy);
+          if (d < 46 && d < bestD){ bestD = d; best = id; }
+        }
+        return best;
+      }
+      var askbar = document.getElementById("askbar"), askIn = document.getElementById("askIn");
+      function openAsk(id){
+        askTarget = id; var info = roster[id] || { name:"", role:"" };
+        document.getElementById("askLabel").textContent = "Ask " + info.name + (info.role ? " (" + info.role + ")" : "") + ":";
+        askbar.hidden = false; askIn.value = ""; askIn.focus();
+      }
+      function closeAsk(){ askbar.hidden = true; askTarget = null; }
+      function sendAsk(){
+        var q = askIn.value.trim(); if (!q || askTarget == null) return;
+        if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"ask", id:+askTarget, q:q }));
+        closeAsk();
+      }
+      document.getElementById("askSend").addEventListener("click", sendAsk);
+      document.getElementById("askClose").addEventListener("click", closeAsk);
+      askIn.addEventListener("keydown", function(e){ if (e.key==="Enter"){ e.preventDefault(); sendAsk(); } else if (e.key==="Escape"){ closeAsk(); } });
       // stream pointer target to server, throttled
       setInterval(function(){
         if (ws && ws.readyState===1 && pointer.active){
@@ -1585,6 +1649,14 @@ data:
         var ids = Object.keys(sheep).sort(function(a,b){ return sheep[a].ry - sheep[b].ry; });
         for (var k=0;k<ids.length;k++) drawSheep(ids[k]);
 
+        // visitor question bubbles
+        for (var qid in qBubbles){
+          var qb = qBubbles[qid]; if (now - qb.t > 6000){ delete qBubbles[qid]; continue; }
+          var qs = sheep[qid]; if (!qs) continue;
+          ctx.globalAlpha = (now - qb.t > 5200) ? Math.max(0, (6000-(now-qb.t))/800) : 1;
+          drawSpeechBubble(toScreenX(qs.rx), toScreenY(qs.ry) - view.s*44, qb.text);
+          ctx.globalAlpha = 1;
+        }
         // exec AI speech bubbles (drawn above the herd)
         for (var eid in execBubbles){
           var eb = execBubbles[eid]; if (now - eb.t > 7000){ delete execBubbles[eid]; continue; }
@@ -1657,9 +1729,9 @@ data:
         ctx.font = "600 " + (u*11) + "px system-ui, -apple-system, sans-serif";
         var words = text.split(" "), lines = [], cur = "";
         for (var i=0;i<words.length;i++){ var tst = cur ? cur+" "+words[i] : words[i];
-          if (ctx.measureText(tst).width > u*150 && cur){ lines.push(cur); cur = words[i]; } else cur = tst; }
+          if (ctx.measureText(tst).width > u*175 && cur){ lines.push(cur); cur = words[i]; } else cur = tst; }
         if (cur) lines.push(cur);
-        if (lines.length > 3){ lines = lines.slice(0,3); lines[2] = lines[2].slice(0,22) + "…"; }
+        if (lines.length > 4){ lines = lines.slice(0,4); lines[3] = lines[3].slice(0,26) + "…"; }
         var w = 0; for (var l=0;l<lines.length;l++) w = Math.max(w, ctx.measureText(lines[l]).width);
         var padX = u*9, padY = u*6, lh = u*14;
         var bw = w + padX*2, bh = lines.length*lh + padY*2, bx = cx - bw/2, by = baseY - bh;
@@ -1957,10 +2029,11 @@ data:
         background:rgba(251,244,226,.95);color:#33261a;padding:.6rem .9rem;outline:none;}
       #nameIn{flex:0 0 130px;min-width:110px;font-family:var(--mono);}
       #msgIn{flex:1 1 200px;min-width:140px;}
-      #sendBtn{flex:0 0 auto;font-family:var(--display);text-transform:uppercase;letter-spacing:.05em;font-size:.95rem;
+      #sendBtn,#orderBtn{flex:0 0 auto;font-family:var(--display);text-transform:uppercase;letter-spacing:.05em;font-size:.95rem;
         color:#f4ead0;background:var(--terra);border:2px solid var(--saddle-dk);border-radius:30px;padding:.55rem 1.2rem;
         cursor:pointer;box-shadow:0 4px 0 var(--saddle-dk);}
-      #sendBtn:active{transform:translateY(4px);box-shadow:0 1px 0 var(--saddle-dk);}
+      #orderBtn{background:var(--wheat-deep);padding:.55rem .8rem;}
+      #sendBtn:active,#orderBtn:active{transform:translateY(4px);box-shadow:0 1px 0 var(--saddle-dk);}
       @media (max-width:520px){ #nameIn{flex:1 1 100%;} }
 
       .conn{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:rgba(20,15,30,.8);
@@ -1997,6 +2070,7 @@ data:
       <div class="inputs">
         <input id="nameIn" maxlength="18" placeholder="your name" autocomplete="off" />
         <input id="msgIn" maxlength="240" placeholder="say something chill…" autocomplete="off" enterkeyhint="send" />
+        <button id="orderBtn" type="button" title="Order a drink from Sam">🍹</button>
         <button id="sendBtn" type="button">Send</button>
       </div>
     </div>
@@ -2107,6 +2181,8 @@ data:
       }
       sendBtn.addEventListener("click", sendChat);
       msgIn.addEventListener("keydown", function(e){ if (e.key==="Enter"){ e.preventDefault(); sendChat(); } });
+      var orderBtn = document.getElementById("orderBtn");
+      orderBtn.addEventListener("click", function(){ if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"order" })); });
       function setName(){
         var n = nameIn.value.trim(); if (!n) return;
         try { localStorage.setItem("chill-name", n); } catch(e){}
