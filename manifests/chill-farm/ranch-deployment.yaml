@@ -18,7 +18,7 @@ spec:
       labels:
         app: chill-ranch
       annotations:
-        chill-ranch/src-rev: "1"
+        chill-ranch/src-rev: "2"
     spec:
       containers:
       - name: ranch
@@ -28,6 +28,10 @@ spec:
         env:
         - name: PORT
           value: "8080"
+        - name: OLLAMA_URL          # DGX Spark Ollama for the AI host "Sam"
+          value: "http://10.0.129.94:11434"
+        - name: OLLAMA_MODEL
+          value: "llama3.1:8b"
         ports:
         - name: ws
           containerPort: 8080

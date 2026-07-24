@@ -2032,10 +2032,11 @@ data:
         var y = 30 + (row % 3)*18 + (Math.floor(row/3)*4);
         return { x: Math.min(90, x), y: Math.min(72, y) };
       }
+      function riderFor(g){ return g.host ? "🌵" : (g.id===myId ? "🤠" : "😌"); }
       function makeHammock(g){
-        var h = document.createElement("div"); h.className = "hammock" + (g.id===myId ? " me":"");
+        var h = document.createElement("div"); h.className = "hammock" + (g.id===myId ? " me":"") + (g.host ? " host":"");
         h.innerHTML = '<div class="swing"><div class="rope"></div><div class="cloth"></div>'+
-          '<div class="rider">'+(g.id===myId ? "🤠":"😌")+'</div></div><div class="nm"></div>';
+          '<div class="rider">'+riderFor(g)+'</div></div><div class="nm"></div>';
         h.querySelector(".nm").textContent = g.name;
         var p = slotPos(g.slot); h.style.left = p.x+"%"; h.style.top = p.y+"%";
         hammocksEl.appendChild(h); return h;
@@ -2047,7 +2048,7 @@ data:
           if (!h){ h = hammocks[g.id] = makeHammock(g); }
           else { var p=slotPos(g.slot); h.style.left=p.x+"%"; h.style.top=p.y+"%"; h.querySelector(".nm").textContent=g.name; }
           h.classList.toggle("me", g.id===myId);
-          h.querySelector(".rider").textContent = (g.id===myId ? "🤠":"😌");
+          h.querySelector(".rider").textContent = riderFor(g);
         }
         for (var id in hammocks) if (!seen[id]){ hammocks[id].remove(); delete hammocks[id]; }
       }
