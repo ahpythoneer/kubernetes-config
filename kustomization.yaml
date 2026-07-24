@@ -124,3 +124,7 @@ resources:
   - manifests/chill-farm/deployment.yaml
   - manifests/chill-farm/service.yaml
   - manifests/chill-farm/ingress.yaml
+  # Chill Farm — "The Commons" multiplayer pasture (dependency-free node WS server)
+  - manifests/chill-farm/pasture-src.yaml
+  - manifests/chill-farm/pasture-deployment.yaml
+  - manifests/chill-farm/pasture-service.yaml

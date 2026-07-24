@@ -6,15 +6,24 @@ metadata:
   annotations:
     # Traffic arrives via the Cloudflare Tunnel, which terminates TLS at the edge
     # and connects to this ingress over HTTP. No cert-manager / no external-dns
-    # entry is needed for the only-chill.com zone — the tunnel public hostname
-    # creates the DNS record. HTTP-only here on purpose.
+    # entry is needed for the only-chill.com zone. HTTP-only here on purpose.
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # keep long-lived WebSocket connections (/ws -> pasture game server) alive
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
 spec:
   ingressClassName: nginx
   rules:
   - host: only-chill.com
     http:
       paths:
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: chill-pasture
+            port:
+              number: 8080
       - path: /
         pathType: Prefix
         backend:
@@ -25,6 +34,13 @@ spec:
   - host: www.only-chill.com
     http:
       paths:
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: chill-pasture
+            port:
+              number: 8080
       - path: /
         pathType: Prefix
         backend:
