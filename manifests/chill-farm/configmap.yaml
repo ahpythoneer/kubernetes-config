@@ -1354,6 +1354,8 @@ data:
       <div style="display:flex;flex-direction:column;align-items:flex-end;">
         <div class="stats">
           <a class="chip" href="/ranch/" style="text-decoration:none">🌙 The Ranch →</a>
+          <button class="chip" id="sndBtn" style="cursor:pointer" title="Ambient sound">🔈 sound</button>
+          <span class="chip" id="wxChip">☀️ clear</span>
           <span class="chip">🐑 <b id="nSheep">–</b> chilling</span>
           <span class="chip">🌿 grazed <b id="nGraze">0</b></span>
           <span class="chip">you're <b id="youName">…</b></span>
@@ -1378,6 +1380,13 @@ data:
       var grass = new Array(COLS*ROWS).fill(6);
       var baas = [];                   // {x,y,t}
       var pointer = { x: W/2, y: H/2, active:false };
+      var weather = 0;                       // 0 clear, 1 cloudy, 2 rain (shared, from server)
+      var WX = [{e:"☀️",t:"clear"},{e:"⛅",t:"cloudy"},{e:"🌧️",t:"rain"}];
+      var wxChip = document.getElementById("wxChip");
+      function setWeather(w){ if (w===weather) return; weather=w; wxChip.textContent = WX[w].e+" "+WX[w].t; }
+      var rain = [];
+      function seedRain(){ rain=[]; for (var i=0;i<220;i++) rain.push({ x:Math.random()*cv.width, y:Math.random()*cv.height, l:8+Math.random()*12, sp:9+Math.random()*7 }); }
+      var HATS = { CEO:"🤠", CTO:"🛠️", COO:"🧢", CFO:"💰", CPO:"🌤️" };
 
       // ---------- responsive canvas + world<->screen transform ----------
       var view = { s:1, ox:0, oy:0, dpr:1 };
@@ -1391,7 +1400,7 @@ data:
         view.s = s;
         view.ox = (cv.width - W*s)/2;
         view.oy = (cv.height - H*s)/2;
-        seedFlies();
+        seedFlies(); seedRain();
       }
       // 0 = day, 1 = deep night, based on the visitor's real local time
       function nightness(){
@@ -1441,7 +1450,7 @@ data:
           grass = new Array(COLS*ROWS).fill(6); resize();
           document.getElementById("youName").textContent = myName;
         } else if (m.t === "r"){
-          roster = {}; for (var k in m.roster) roster[k] = { name:m.roster[k][0], hue:m.roster[k][1] };
+          roster = {}; for (var k in m.roster) roster[k] = { name:m.roster[k][0], hue:m.roster[k][1], role:m.roster[k][2]||"" };
         } else if (m.t === "s"){
           var seen = {};
           for (var i=0;i<m.sheep.length;i++){
@@ -1449,9 +1458,10 @@ data:
             seen[id] = 1;
             var s = sheep[id];
             if (!s){ s = sheep[id] = { x:a[1], y:a[2], rx:a[1], ry:a[2], state:a[3], face:1 }; }
-            s.x = a[1]; s.y = a[2]; s.state = a[3];
+            s.x = a[1]; s.y = a[2]; s.state = a[3]; s.vip = a[4] > 0;
           }
           for (var id2 in sheep) if (!seen[id2]) delete sheep[id2];   // left the meadow
+          if (typeof m.w === "number") setWeather(m.w);
           document.getElementById("nSheep").textContent = m.n;
           document.getElementById("nGraze").textContent = m.graze.toLocaleString();
           document.getElementById("chillBar").style.width = m.chill + "%";
@@ -1530,6 +1540,9 @@ data:
           ctx.moveTo(gx, gy); ctx.lineTo(gx + view.s*3, gy - view.s*7); ctx.stroke();
         }
 
+        // campfire (sheep gather round it) — glows brighter after dark
+        drawCampfire(now);
+
         // sheep sorted by y (painter's)
         var ids = Object.keys(sheep).sort(function(a,b){ return sheep[a].ry - sheep[b].ry; });
         for (var k=0;k<ids.length;k++) drawSheep(ids[k]);
@@ -1564,6 +1577,22 @@ data:
           }
         }
 
+        // weather: a grey wash when cloudy/rainy, plus falling rain
+        if (weather === 1){ ctx.fillStyle = "rgba(70,76,92,.14)"; ctx.fillRect(0,0,cv.width,cv.height); }
+        if (weather === 2){
+          ctx.fillStyle = "rgba(55,60,78,.28)"; ctx.fillRect(0,0,cv.width,cv.height);
+          if (!reduce){
+            ctx.strokeStyle = "rgba(180,200,230,.45)"; ctx.lineWidth = Math.max(1, view.s*0.9);
+            ctx.beginPath();
+            for (var ri=0; ri<rain.length; ri++){ var dp = rain[ri];
+              dp.y += dp.sp * view.s; dp.x += view.s*1.6;
+              if (dp.y > cv.height){ dp.y = -10; dp.x = Math.random()*cv.width; }
+              ctx.moveTo(dp.x, dp.y); ctx.lineTo(dp.x - view.s*2.5, dp.y - dp.l*view.s);
+            }
+            ctx.stroke();
+          }
+        }
+
         // your cursor target marker
         if (pointer.active){
           var txs = toScreenX(pointer.x), tys = toScreenY(pointer.y);
@@ -1571,7 +1600,47 @@ data:
           ctx.beginPath(); ctx.arc(txs, tys, view.s*7 + Math.sin(now/300)*view.s*2, 0, 6.28); ctx.stroke();
         }
 
+        ambientTick(now);
         requestAnimationFrame(render);
+      }
+
+      // campfire the herd gathers around; flames flicker, glow strengthens at night
+      function drawCampfire(now){
+        var cx = toScreenX(W*0.5), cy = toScreenY(H*0.6);
+        var u = view.s, nf = nightness();
+        var flick = reduce ? 1 : (0.85 + 0.15*Math.sin(now/90) + 0.08*Math.sin(now/37));
+        // glow
+        var glowR = u*70*(0.6 + nf*0.8);
+        var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+        g.addColorStop(0, "rgba(255,150,50," + (0.10 + nf*0.28) + ")");
+        g.addColorStop(1, "rgba(255,150,50,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, glowR, 0, 6.28); ctx.fill();
+        // logs
+        ctx.strokeStyle = "#5a3a20"; ctx.lineWidth = u*4; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(cx-u*14, cy+u*6); ctx.lineTo(cx+u*14, cy+u*8);
+        ctx.moveTo(cx-u*12, cy+u*9); ctx.lineTo(cx+u*13, cy+u*4); ctx.stroke();
+        ctx.lineCap = "butt";
+        // flames
+        var flames = [["rgba(196,40,20,.9)",18],["rgba(240,120,30,.95)",13],["rgba(255,200,70,.95)",8]];
+        for (var fl=0; fl<flames.length; fl++){
+          var hgt = flames[fl][1]*u*flick;
+          ctx.fillStyle = flames[fl][0];
+          ctx.beginPath();
+          ctx.moveTo(cx - hgt*0.5, cy);
+          ctx.quadraticCurveTo(cx - hgt*0.35, cy - hgt*0.7, cx, cy - hgt);
+          ctx.quadraticCurveTo(cx + hgt*0.35, cy - hgt*0.7, cx + hgt*0.5, cy);
+          ctx.quadraticCurveTo(cx, cy + hgt*0.2, cx - hgt*0.5, cy); ctx.fill();
+        }
+        // sparks at night
+        if (nf > 0.4 && !reduce){
+          for (var sp=0; sp<5; sp++){
+            var ph = now/600 + sp*1.7, life = (ph % 1);
+            ctx.globalAlpha = (1-life) * (nf);
+            ctx.fillStyle = "#ffd27a";
+            ctx.beginPath(); ctx.arc(cx + Math.sin(ph*4+sp)*u*8, cy - life*u*46, u*1.4, 0, 6.28); ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
       }
 
       function drawSheep(id){
@@ -1617,21 +1686,83 @@ data:
           ctx.beginPath(); ctx.arc(hx-u*2, hy-u*1, u*1.6, 0, 6.28); ctx.arc(hx+u*3, hy-u*1, u*1.6, 0, 6.28); ctx.fill();
         }
 
-        // your hat + ring
+        // hats: your own 🤠 with a ring, or an exec's signature hat
         if (mine){
           ctx.strokeStyle = "rgba(255,214,80,.9)"; ctx.lineWidth = u*2;
           ctx.beginPath(); ctx.arc(x, y-u*2, u*24, 0, 6.28); ctx.stroke();
           ctx.font = (u*20)+"px sans-serif"; ctx.textAlign="center"; ctx.fillText("🤠", hx, hy - u*10);
+        } else if (info.role && HATS[info.role]){
+          ctx.font = (u*20)+"px sans-serif"; ctx.textAlign="center"; ctx.fillText(HATS[info.role], hx, hy - u*10);
         }
 
-        // name label
+        // name label (execs get a gold "Name · ROLE" plate)
         if (info.name){
-          ctx.font = "700 "+(u*11)+"px 'Courier New',monospace"; ctx.textAlign = "center";
-          ctx.fillStyle = "rgba(20,30,12,.55)"; ctx.fillText(info.name, x+1, y-u*26+1);
-          ctx.fillStyle = mine ? "#fff" : "hsl("+info.hue+",70%,88%)"; ctx.fillText(info.name, x, y-u*27);
+          ctx.textAlign = "center";
+          var label = info.role ? (info.name + " · " + info.role) : info.name;
+          ctx.font = "700 "+(u*11)+"px 'Courier New',monospace";
+          ctx.fillStyle = "rgba(20,30,12,.55)"; ctx.fillText(label, x+1, y-u*26+1);
+          ctx.fillStyle = mine ? "#fff" : (info.role ? "#ffd86b" : "hsl("+info.hue+",70%,88%)");
+          ctx.fillText(label, x, y-u*27);
         }
       }
       requestAnimationFrame(render);
+
+      // ---------- ambient sound (opt-in): wind + birds by day, crickets at night ----------
+      var audio = { on:false, ac:null, master:null, wind:null, windLp:null, nextChirp:0 };
+      function buildAudio(){
+        var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
+        var ac = new AC(); audio.ac = ac;
+        var master = ac.createGain(); master.gain.value = 0; master.connect(ac.destination); audio.master = master;
+        var buf = ac.createBuffer(1, Math.floor(ac.sampleRate*2), ac.sampleRate), d = buf.getChannelData(0);
+        for (var i=0;i<d.length;i++) d[i] = (Math.random()*2-1)*0.6;
+        var src = ac.createBufferSource(); src.buffer = buf; src.loop = true;
+        var lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 480;
+        var wg = ac.createGain(); wg.gain.value = 0.04;
+        src.connect(lp); lp.connect(wg); wg.connect(master); src.start();
+        audio.wind = wg; audio.windLp = lp;
+        return true;
+      }
+      function chirp(night){
+        var ac = audio.ac; if (!ac) return; var t = ac.currentTime;
+        if (night){                                   // cricket: fast high pulses
+          for (var k=0;k<4;k++){ var o=ac.createOscillator(), g=ac.createGain(), bp=ac.createBiquadFilter();
+            o.type="square"; o.frequency.value = 4300 + Math.random()*300;
+            bp.type="bandpass"; bp.frequency.value = 4500; bp.Q.value = 8;
+            o.connect(bp); bp.connect(g); g.connect(audio.master);
+            var st = t + k*0.03; g.gain.setValueAtTime(0, st); g.gain.linearRampToValueAtTime(0.06, st+0.004); g.gain.linearRampToValueAtTime(0, st+0.02);
+            o.start(st); o.stop(st+0.03); }
+        } else {                                      // bird: short rising warble
+          var o2=ac.createOscillator(), g2=ac.createGain(); o2.type="sine"; o2.connect(g2); g2.connect(audio.master);
+          o2.frequency.setValueAtTime(1900+Math.random()*400, t);
+          o2.frequency.linearRampToValueAtTime(2500+Math.random()*500, t+0.08);
+          o2.frequency.linearRampToValueAtTime(2100, t+0.16);
+          g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(0.05, t+0.02); g2.gain.linearRampToValueAtTime(0, t+0.22);
+          o2.start(t); o2.stop(t+0.24);
+        }
+      }
+      function ambientTick(now){
+        if (!audio.on || !audio.ac) return;
+        if (audio.wind){ var tg = weather===2 ? 0.11 : weather===1 ? 0.06 : 0.035; audio.wind.gain.value += (tg - audio.wind.gain.value)*0.02; }
+        if (audio.windLp){ var lt = weather===2 ? 900 : 480; audio.windLp.frequency.value += (lt - audio.windLp.frequency.value)*0.02; }
+        if (now > audio.nextChirp){
+          var night = nightness() > 0.5; chirp(night);
+          audio.nextChirp = now + (night ? (900 + Math.random()*1800) : (3000 + Math.random()*5000));
+        }
+      }
+      var sndBtn = document.getElementById("sndBtn");
+      sndBtn.addEventListener("click", function(){
+        if (!audio.on){
+          if (!audio.ac && !buildAudio()) return;
+          if (audio.ac.state === "suspended") audio.ac.resume();
+          audio.on = true; audio.nextChirp = performance.now() + 700;
+          audio.master.gain.setTargetAtTime(0.6, audio.ac.currentTime, 0.4);
+          sndBtn.textContent = "🔊 sound";
+        } else {
+          audio.on = false;
+          if (audio.master) audio.master.gain.setTargetAtTime(0, audio.ac.currentTime, 0.3);
+          sndBtn.textContent = "🔈 sound";
+        }
+      });
     })();
     </script>
   ranch.html: |
@@ -1754,6 +1885,7 @@ data:
       <nav>
         <a href="/pasture/">Pasture</a>
         <a href="/">Home</a>
+        <button id="sndBtn" class="count" style="cursor:pointer;font-family:var(--mono);font-size:.76rem">🔈 sound</button>
         <span class="count">🛖 <b id="count">–</b> loungin'</span>
       </nav>
     </header>
@@ -1879,5 +2011,42 @@ data:
       }
       nameIn.addEventListener("change", setName);
       nameIn.addEventListener("keydown", function(e){ if (e.key==="Enter"){ e.preventDefault(); setName(); msgIn.focus(); } });
+
+      // ---------- opt-in evening ambience: soft wind + crickets ----------
+      var audio = { on:false, ac:null, master:null, timer:0 };
+      function buildAudio(){
+        var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
+        var ac = new AC(); audio.ac = ac;
+        var master = ac.createGain(); master.gain.value = 0; master.connect(ac.destination); audio.master = master;
+        var buf = ac.createBuffer(1, Math.floor(ac.sampleRate*2), ac.sampleRate), d = buf.getChannelData(0);
+        for (var i=0;i<d.length;i++) d[i] = (Math.random()*2-1)*0.5;
+        var src = ac.createBufferSource(); src.buffer = buf; src.loop = true;
+        var lp = ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value = 420;
+        var wg = ac.createGain(); wg.gain.value = 0.04;
+        src.connect(lp); lp.connect(wg); wg.connect(master); src.start();
+        return true;
+      }
+      function cricket(){
+        var ac = audio.ac; if (!ac || !audio.on) return; var t = ac.currentTime;
+        for (var k=0;k<4;k++){ var o=ac.createOscillator(), g=ac.createGain(), bp=ac.createBiquadFilter();
+          o.type="square"; o.frequency.value = 4300 + Math.random()*300; bp.type="bandpass"; bp.frequency.value=4500; bp.Q.value=8;
+          o.connect(bp); bp.connect(g); g.connect(audio.master);
+          var st=t+k*0.03; g.gain.setValueAtTime(0,st); g.gain.linearRampToValueAtTime(0.06,st+0.004); g.gain.linearRampToValueAtTime(0,st+0.02);
+          o.start(st); o.stop(st+0.03); }
+        audio.timer = setTimeout(cricket, 800 + Math.random()*1800);
+      }
+      var sndBtn = document.getElementById("sndBtn");
+      sndBtn.addEventListener("click", function(){
+        if (!audio.on){
+          if (!audio.ac && !buildAudio()) return;
+          if (audio.ac.state === "suspended") audio.ac.resume();
+          audio.on = true; audio.master.gain.setTargetAtTime(0.6, audio.ac.currentTime, 0.4);
+          sndBtn.textContent = "🔊 sound"; cricket();
+        } else {
+          audio.on = false; clearTimeout(audio.timer);
+          if (audio.master) audio.master.gain.setTargetAtTime(0, audio.ac.currentTime, 0.3);
+          sndBtn.textContent = "🔈 sound";
+        }
+      });
     })();
     </script>
