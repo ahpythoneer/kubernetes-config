@@ -120,6 +120,7 @@ resources:
   # Chill Farm — only-chill.com static site
   - manifests/chill-farm/namespace.yaml
   - manifests/chill-farm/configmap.yaml
+  - manifests/chill-farm/nginx-config.yaml
   - manifests/chill-farm/deployment.yaml
   - manifests/chill-farm/service.yaml
   - manifests/chill-farm/ingress.yaml

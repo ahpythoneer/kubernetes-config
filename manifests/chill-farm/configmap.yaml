@@ -7,6 +7,7 @@ metadata:
     app: chill-farm
 data:
   index.html: |
+    <meta charset="utf-8" />
     <title>Chill Farm — We're Hiring People to Chill</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Chill Farm: we are hiring people to chill as we have so much chill in the backlog. A ranch for professional relaxers." />

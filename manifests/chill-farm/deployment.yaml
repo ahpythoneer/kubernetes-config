@@ -16,7 +16,7 @@ spec:
         app: chill-farm
       annotations:
         # bump this to force a rollout when the site content changes
-        chill-farm/content-rev: "1"
+        chill-farm/content-rev: "2"
     spec:
       containers:
       - name: nginx
@@ -29,6 +29,10 @@ spec:
         volumeMounts:
         - name: site
           mountPath: /usr/share/nginx/html
+          readOnly: true
+        - name: nginx-charset
+          mountPath: /etc/nginx/conf.d/charset.conf
+          subPath: charset.conf
           readOnly: true
         resources:
           requests:
@@ -59,3 +63,9 @@ spec:
           items:
           - key: index.html
             path: index.html
+      - name: nginx-charset
+        configMap:
+          name: chill-farm-nginx
+          items:
+          - key: charset.conf
+            path: charset.conf
