@@ -19,8 +19,18 @@ spec:
         app: chill-pasture
       annotations:
         # bump to force a rollout when server.js changes
-        chill-pasture/src-rev: "11"
+        chill-pasture/src-rev: "12"
     spec:
+      initContainers:
+      # make the NFS-backed data dir writable by the non-root app (uid 1000)
+      - name: fix-perms
+        image: busybox:1.36
+        command: ["sh", "-c", "chmod 777 /data || true"]
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        securityContext:
+          runAsUser: 0
       containers:
       - name: pasture
         image: node:20-alpine
@@ -33,6 +43,8 @@ spec:
           value: "http://10.0.129.94:11434"
         - name: OLLAMA_MODEL
           value: "llama3.1:8b"
+        - name: DATA_FILE           # persistent state (chill points, saved sheep, guestbook)
+          value: "/data/state.json"
         ports:
         - name: ws
           containerPort: 8080
@@ -42,6 +54,8 @@ spec:
           mountPath: /app/server.js
           subPath: server.js
           readOnly: true
+        - name: data
+          mountPath: /data
         resources:
           requests:
             memory: "48Mi"
@@ -72,3 +86,6 @@ spec:
           items:
           - key: server.js
             path: server.js
+      - name: data
+        persistentVolumeClaim:
+          claimName: chill-pasture-data
