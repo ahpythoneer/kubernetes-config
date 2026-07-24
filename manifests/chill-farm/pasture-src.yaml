@@ -1,0 +1,206 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chill-pasture-src
+  namespace: chill-farm
+  labels:
+    app: chill-pasture
+data:
+  server.js: |
+    'use strict';
+    /* ============================================================
+       Chill Farm — "The Commons" pasture server
+       A dependency-free WebSocket server (RFC6455 hand-rolled) that
+       runs a shared, slow, multiplayer sheep-grazing meadow.
+       One replica, in-memory state. Node 18+ (BigUInt64 helpers).
+       ============================================================ */
+    const http = require('http');
+    const crypto = require('crypto');
+
+    const PORT = process.env.PORT || 8080;
+    const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+    // ---- world ----
+    const W = 1600, H = 900, COLS = 40, ROWS = 24;
+    const CW = W / COLS, CH = H / ROWS;
+    const TICK_MS = 100;                 // 10 Hz sim
+    const SPEED = 130;                   // world units / sec (chill amble)
+    const GRAZE_R = 26;                  // how close to nibble a tuft
+    const REGROW = 0.0022;               // grass regrow / tick
+    const EAT = 0.05;                    // grass eaten / tick while grazing
+    const SLEEP_AFTER = 6000;            // ms idle -> nap
+
+    const ADJ = ['Sleepy','Mellow','Drowsy','Cozy','Lazy','Breezy','Sunny','Woolly','Dozy','Serene','Comfy','Idle'];
+    const NOUN = ['Dave','Sue','Pete','Lou','Meg','Hank','Gus','Bo','Nell','Cliff','Opal','Wade'];
+
+    // ---- state ----
+    const clients = new Map();           // id -> { sock, buf, name, hue, x,y,tx,ty, state, lastInput, alive }
+    let nextId = 1;
+    let grazedTotal = 0;
+    const grass = new Float32Array(COLS * ROWS);
+    for (let i = 0; i < grass.length; i++) grass[i] = 0.6 + Math.random() * 0.4;
+
+    // ---- WS frame helpers (server->client, unmasked) ----
+    function encode(str) {
+      const p = Buffer.from(str);
+      const n = p.length;
+      let head;
+      if (n < 126) { head = Buffer.from([0x81, n]); }
+      else if (n < 65536) { head = Buffer.alloc(4); head[0] = 0x81; head[1] = 126; head.writeUInt16BE(n, 2); }
+      else { head = Buffer.alloc(10); head[0] = 0x81; head[1] = 127; head.writeBigUInt64BE(BigInt(n), 2); }
+      return Buffer.concat([head, p]);
+    }
+    function sendRaw(c, buf) { try { c.sock.write(buf); } catch (e) { drop(c); } }
+    function send(c, obj) { sendRaw(c, encode(JSON.stringify(obj))); }
+    function broadcast(obj) { const b = encode(JSON.stringify(obj)); for (const c of clients.values()) sendRaw(c, b); }
+
+    // ---- HTTP + upgrade ----
+    const server = http.createServer((req, res) => {
+      if (req.url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('chill pasture :: ' + clients.size + ' sheep grazing');
+    });
+
+    server.on('upgrade', (req, sock) => {
+      const key = req.headers['sec-websocket-key'];
+      if (!key) { sock.destroy(); return; }
+      const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
+      sock.write(
+        'HTTP/1.1 101 Switching Protocols\r\n' +
+        'Upgrade: websocket\r\nConnection: Upgrade\r\n' +
+        'Sec-WebSocket-Accept: ' + accept + '\r\n\r\n');
+      onConnect(sock);
+    });
+
+    function onConnect(sock) {
+      const id = nextId++;
+      const c = {
+        id, sock, buf: Buffer.alloc(0),
+        name: ADJ[(Math.random() * ADJ.length) | 0] + ' ' + NOUN[(Math.random() * NOUN.length) | 0],
+        hue: (id * 47) % 360,
+        x: W / 2 + (Math.random() * 200 - 100), y: H / 2 + (Math.random() * 160 - 80),
+        tx: 0, ty: 0, state: 0, lastInput: Date.now(), alive: true,
+      };
+      c.tx = c.x; c.ty = c.y;
+      clients.set(id, c);
+
+      sock.setNoDelay(true);
+      sock.on('data', (chunk) => onData(c, chunk));
+      sock.on('close', () => drop(c));
+      sock.on('error', () => drop(c));
+
+      send(c, { t: 'welcome', id, w: W, h: H, cols: COLS, rows: ROWS, name: c.name });
+      sendGrass(c);
+      broadcastRoster();
+    }
+
+    function drop(c) {
+      if (!c.alive) return;
+      c.alive = false;
+      clients.delete(c.id);
+      try { c.sock.destroy(); } catch (e) {}
+      broadcastRoster();
+    }
+
+    // ---- incoming frame parser (client->server, masked) ----
+    function onData(c, chunk) {
+      c.buf = Buffer.concat([c.buf, chunk]);
+      while (true) {
+        const b = c.buf;
+        if (b.length < 2) return;
+        const opcode = b[0] & 0x0f;
+        const masked = b[1] & 0x80;
+        let len = b[1] & 0x7f, off = 2;
+        if (len === 126) { if (b.length < 4) return; len = b.readUInt16BE(2); off = 4; }
+        else if (len === 127) { if (b.length < 10) return; len = Number(b.readBigUInt64BE(2)); off = 10; }
+        if (len > 1_000_000) { drop(c); return; }          // sanity cap
+        let mask;
+        if (masked) { if (b.length < off + 4) return; mask = b.slice(off, off + 4); off += 4; }
+        if (b.length < off + len) return;
+        let pay = b.slice(off, off + len);
+        if (masked) { const o = Buffer.alloc(len); for (let i = 0; i < len; i++) o[i] = pay[i] ^ mask[i & 3]; pay = o; }
+        c.buf = b.slice(off + len);
+
+        if (opcode === 0x8) { drop(c); return; }            // close
+        else if (opcode === 0x9) { sendRaw(c, Buffer.concat([Buffer.from([0x8a, pay.length & 0x7f]), pay])); } // ping->pong
+        else if (opcode === 0x1) { onMessage(c, pay.toString()); }
+        // continuation (0x0) / pong (0xa) ignored — browsers send single text frames
+      }
+    }
+
+    function onMessage(c, str) {
+      let m; try { m = JSON.parse(str); } catch (e) { return; }
+      if (m.t === 'move') {
+        if (typeof m.x === 'number' && typeof m.y === 'number') {
+          c.tx = Math.max(0, Math.min(W, m.x));
+          c.ty = Math.max(0, Math.min(H, m.y));
+          c.lastInput = Date.now();
+        }
+      } else if (m.t === 'baa') {
+        broadcast({ t: 'b', id: c.id });
+      } else if (m.t === 'name' && typeof m.name === 'string') {
+        c.name = m.name.slice(0, 18).replace(/[^\w \-!]/g, '') || c.name;
+        broadcastRoster();
+      }
+    }
+
+    function broadcastRoster() {
+      const r = {};
+      for (const c of clients.values()) r[c.id] = [c.name, c.hue];
+      broadcast({ t: 'r', roster: r });
+    }
+    function sendGrass(c) { send(c, { t: 'g', grass: grassStr() }); }
+    function grassStr() {
+      let s = '';
+      for (let i = 0; i < grass.length; i++) s += Math.min(9, (grass[i] * 9) | 0);
+      return s;
+    }
+
+    // ---- simulation ----
+    let frame = 0;
+    setInterval(() => {
+      frame++;
+      const now = Date.now();
+      const step = SPEED * (TICK_MS / 1000);
+
+      for (const c of clients.values()) {
+        const dx = c.tx - c.x, dy = c.ty - c.y;
+        const d = Math.hypot(dx, dy);
+        if (d > 4) {                              // amble toward pointer
+          const m = Math.min(step, d);
+          c.x += (dx / d) * m; c.y += (dy / d) * m;
+          c.state = 1;                            // walk
+        } else if (now - c.lastInput > SLEEP_AFTER) {
+          c.state = 3;                            // sleep
+        } else {
+          const gi = cellIndex(c.x, c.y);
+          if (grass[gi] > 0.3) {                   // graze
+            grass[gi] = Math.max(0, grass[gi] - EAT);
+            grazedTotal++;
+            c.state = 2;
+          } else c.state = 0;                      // idle
+        }
+      }
+
+      // grass regrows everywhere, slowly
+      for (let i = 0; i < grass.length; i++) if (grass[i] < 1) grass[i] = Math.min(1, grass[i] + REGROW);
+
+      // positions @ 10Hz
+      const sheep = [];
+      for (const c of clients.values()) sheep.push([c.id, Math.round(c.x), Math.round(c.y), c.state]);
+      let sum = 0; for (let i = 0; i < grass.length; i++) sum += grass[i];
+      const chill = Math.round((sum / grass.length) * 100);
+      broadcast({ t: 's', sheep, n: clients.size, chill, graze: grazedTotal });
+
+      // grass @ 2Hz
+      if (frame % 5 === 0) broadcast({ t: 'g', grass: grassStr() });
+    }, TICK_MS);
+
+    function cellIndex(x, y) {
+      let cx = (x / CW) | 0, cy = (y / CH) | 0;
+      if (cx < 0) cx = 0; if (cx >= COLS) cx = COLS - 1;
+      if (cy < 0) cy = 0; if (cy >= ROWS) cy = ROWS - 1;
+      return cy * COLS + cx;
+    }
+
+    server.listen(PORT, () => console.log('chill pasture listening on :' + PORT));

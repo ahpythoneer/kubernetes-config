@@ -361,6 +361,7 @@ data:
         <a href="#backlog">The Backlog</a>
         <a href="#values">How We Chill</a>
         <a href="/careers/">Careers</a>
+        <a href="/pasture/">Pasture 🐑</a>
         <a href="#hire" class="hire-link">We're Hiring</a>
         <button class="theme-toggle" id="themeBtn" aria-label="Change the time of day" title="Sunrise / Sunset">🌤️</button>
       </nav>
@@ -418,7 +419,7 @@ data:
           <div class="reveal">
             <span class="eyebrow">The Chief Chillers</span>
             <h2 class="title">Meet the C-Suite of Chill</h2>
-            <p class="lead">Four seasoned professionals, zero urgency. Every one of them a "Chilling Officer" — because at Chill Farm the "C" was never negotiable.</p>
+            <p class="lead">Five seasoned professionals, zero urgency. Every one of them a "Chilling Officer" — because at Chill Farm the "C" was never negotiable.</p>
           </div>
 
           <div class="team-grid">
@@ -460,6 +461,16 @@ data:
               <div class="title">Chilling Financial Officer</div>
               <div class="bio">Balances the books and the vibes. Invests exclusively in lemonade, sunshine, and comfortable furniture.</div>
               <div class="chillstat">Chill Level: █████████░ 9.1 / 10</div>
+            </article>
+
+            <article class="badgecard reveal">
+              <span class="pin">📌</span>
+              <div class="avatar">🌤️</div>
+              <div class="role">CPO</div>
+              <h3>Francisco Ramos</h3>
+              <div class="title">Chilling People Officer</div>
+              <div class="bio">Our newest hire and resident work-life philosopher. Lives by one motto — <em>"there is life outside work"</em> — and makes sure everyone clocks out to go live it.</div>
+              <div class="chillstat">Chill Level: █████████░ 9.6 / 10</div>
             </article>
           </div>
         </div>
@@ -526,7 +537,8 @@ data:
       <div class="fbrand">🤠 Chill Farm</div>
       <div class="crew">
         Aman Patel · CEO &nbsp;|&nbsp; Cody Beeston · CTO<br>
-        Joseph Taylor · COO &nbsp;|&nbsp; Elias Torres · CFO
+        Joseph Taylor · COO &nbsp;|&nbsp; Elias Torres · CFO<br>
+        Francisco Ramos · CPO
       </div>
       <div class="fine">
         only-chill.com — no cattle were rushed in the making of this ranch.<br>
@@ -904,6 +916,7 @@ data:
         <a href="/" class="home-link">Home</a>
         <a href="/#crew">The Crew</a>
         <a href="/#values">How We Chill</a>
+        <a href="/pasture/">Pasture 🐑</a>
         <button class="theme-toggle" id="themeBtn" aria-label="Change the time of day" title="Sunrise / Sunset">🌤️</button>
       </nav>
     </header>
@@ -1015,7 +1028,8 @@ data:
       <div class="fbrand">🤠 Chill Farm</div>
       <div class="crew">
         Aman Patel · CEO &nbsp;|&nbsp; Cody Beeston · CTO<br>
-        Joseph Taylor · COO &nbsp;|&nbsp; Elias Torres · CFO
+        Joseph Taylor · COO &nbsp;|&nbsp; Elias Torres · CFO<br>
+        Francisco Ramos · CPO
       </div>
       <div class="fine">
         <a href="/">← back to the ranch</a><br>
@@ -1095,5 +1109,295 @@ data:
       }, { passive: true });
 
       try { console.log("%c🤠 Chill Farm careers — you're already overqualified.","font:13px monospace;color:#7a4a26;"); } catch(_){}
+    })();
+    </script>
+  pasture.html: |
+    <meta charset="utf-8" />
+    <title>The Commons — Chill Farm Pasture</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="description" content="A shared, slow multiplayer meadow. Everyone who visits is a sheep. Move your pointer to graze. No score, no rush." />
+    <style>
+      :root{
+        --wheat:#d9a441; --wheat-deep:#b5822c; --saddle:#7a4a26; --saddle-dk:#4a2f1c; --terra:#c15a34;
+        --parch:#f4ead0; --ink:#33261a; --ink-soft:#5c4a38;
+        --display:"Rockwell","Rockwell Nova","Roboto Slab","Courier New",Georgia,serif;
+        --body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+        --mono:"Courier New",ui-monospace,monospace;
+        --ease:cubic-bezier(.22,.61,.36,1);
+      }
+      *{box-sizing:border-box;}
+      html,body{margin:0;height:100%;overflow:hidden;background:#4a6b32;font-family:var(--body);color:var(--ink);}
+      canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:none;}
+
+      .hud{position:fixed;z-index:5;pointer-events:none;font-family:var(--mono);}
+      .top{top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem;padding:.8rem 1rem;
+        background:linear-gradient(180deg, rgba(30,20,12,.55), transparent);}
+      .top a,.top button{pointer-events:auto;}
+      .brand{display:flex;align-items:center;gap:.5rem;font-family:var(--display);font-size:1.05rem;letter-spacing:.03em;
+        color:#fff;text-decoration:none;text-shadow:0 2px 4px rgba(0,0,0,.5);}
+      .brand .badge{width:26px;height:26px;display:grid;place-items:center;background:var(--wheat);color:var(--saddle-dk);
+        border-radius:50%;font-size:1rem;box-shadow:inset 0 0 0 2px var(--saddle-dk);}
+      .stats{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end;}
+      .chip{background:rgba(30,20,12,.6);color:#ffe6ad;border:1px solid rgba(217,164,65,.5);border-radius:30px;
+        padding:.35rem .8rem;font-size:.76rem;letter-spacing:.06em;white-space:nowrap;backdrop-filter:blur(3px);}
+      .chip b{color:#fff;font-variant-numeric:tabular-nums;}
+
+      .meter{margin-top:.3rem;width:150px;height:9px;border-radius:6px;background:rgba(0,0,0,.4);
+        border:1px solid rgba(255,255,255,.2);overflow:hidden;}
+      .meter>i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--wheat),#8bd06a);transition:width .5s var(--ease);}
+
+      .hint{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);z-index:5;pointer-events:none;
+        background:rgba(30,20,12,.6);color:#f4ead0;border:1px solid rgba(217,164,65,.4);border-radius:30px;
+        padding:.5rem 1.1rem;font-family:var(--mono);font-size:.76rem;letter-spacing:.05em;backdrop-filter:blur(3px);
+        text-align:center;max-width:92vw;transition:opacity 1s var(--ease);}
+      .hint.fade{opacity:0;}
+
+      .conn{position:fixed;inset:0;z-index:8;display:grid;place-items:center;background:rgba(30,20,12,.75);
+        color:#ffe6ad;font-family:var(--mono);font-size:.9rem;letter-spacing:.08em;text-align:center;transition:opacity .6s;}
+      .conn.hide{opacity:0;pointer-events:none;}
+      .conn .big{font-family:var(--display);font-size:1.6rem;text-transform:uppercase;margin-bottom:.4rem;color:#fff;}
+    </style>
+
+    <canvas id="c"></canvas>
+
+    <div class="hud top">
+      <a class="brand" href="/"><span class="badge">🐑</span> The Commons</a>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;">
+        <div class="stats">
+          <span class="chip">🐑 <b id="nSheep">–</b> chilling</span>
+          <span class="chip">🌿 grazed <b id="nGraze">0</b></span>
+          <span class="chip">you're <b id="youName">…</b></span>
+        </div>
+        <div class="meter" title="Meadow Chill"><i id="chillBar"></i></div>
+      </div>
+    </div>
+
+    <div class="hint" id="hint">move your cursor — your 🤠 sheep will amble over · stand still to nap · click to baa</div>
+
+    <div class="conn" id="conn"><div><div class="big">🌾 finding the meadow…</div><div id="connMsg">connecting you to the pasture</div></div></div>
+
+    <script>
+    (function(){
+      "use strict";
+      var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      var cv = document.getElementById("c"), ctx = cv.getContext("2d");
+      var W = 1600, H = 900, COLS = 40, ROWS = 24, CW = W/COLS, CH = H/ROWS;
+      var myId = null, myName = "…";
+      var roster = {};                 // id -> {name,hue}
+      var sheep = {};                  // id -> {x,y,rx,ry,state,face}
+      var grass = new Array(COLS*ROWS).fill(6);
+      var baas = [];                   // {x,y,t}
+      var pointer = { x: W/2, y: H/2, active:false };
+
+      // ---------- responsive canvas + world<->screen transform ----------
+      var view = { s:1, ox:0, oy:0, dpr:1 };
+      function resize(){
+        var dpr = Math.min(window.devicePixelRatio||1, 2);
+        view.dpr = dpr;
+        cv.width = Math.floor(innerWidth*dpr); cv.height = Math.floor(innerHeight*dpr);
+        var s = Math.max(cv.width/W, cv.height/H);   // cover
+        view.s = s;
+        view.ox = (cv.width - W*s)/2;
+        view.oy = (cv.height - H*s)/2;
+      }
+      function toScreenX(x){ return view.ox + x*view.s; }
+      function toScreenY(y){ return view.oy + y*view.s; }
+      function toWorld(px,py){
+        return { x:(px*view.dpr - view.ox)/view.s, y:(py*view.dpr - view.oy)/view.s };
+      }
+      addEventListener("resize", resize); resize();
+
+      // ---------- websocket ----------
+      var ws, sendT = 0, retry = 0, connEl = document.getElementById("conn"), connMsg = document.getElementById("connMsg");
+      function connect(){
+        var proto = location.protocol === "https:" ? "wss" : "ws";
+        try { ws = new WebSocket(proto + "://" + location.host + "/ws"); }
+        catch(e){ scheduleRetry(); return; }
+        ws.onopen = function(){ retry = 0; connEl.classList.add("hide"); };
+        ws.onclose = function(){ connEl.classList.remove("hide"); connMsg.textContent = "reconnecting…"; scheduleRetry(); };
+        ws.onerror = function(){ try{ ws.close(); }catch(e){} };
+        ws.onmessage = function(ev){ onMsg(ev.data); };
+      }
+      function scheduleRetry(){ retry = Math.min(retry+1, 6); setTimeout(connect, 500*retry); }
+      function onMsg(data){
+        var m; try { m = JSON.parse(data); } catch(e){ return; }
+        if (m.t === "welcome"){
+          myId = m.id; myName = m.name; W=m.w; H=m.h; COLS=m.cols; ROWS=m.rows; CW=W/COLS; CH=H/ROWS;
+          grass = new Array(COLS*ROWS).fill(6); resize();
+          document.getElementById("youName").textContent = myName;
+        } else if (m.t === "r"){
+          roster = {}; for (var k in m.roster) roster[k] = { name:m.roster[k][0], hue:m.roster[k][1] };
+        } else if (m.t === "s"){
+          var seen = {};
+          for (var i=0;i<m.sheep.length;i++){
+            var a = m.sheep[i], id = a[0];
+            seen[id] = 1;
+            var s = sheep[id];
+            if (!s){ s = sheep[id] = { x:a[1], y:a[2], rx:a[1], ry:a[2], state:a[3], face:1 }; }
+            s.x = a[1]; s.y = a[2]; s.state = a[3];
+          }
+          for (var id2 in sheep) if (!seen[id2]) delete sheep[id2];   // left the meadow
+          document.getElementById("nSheep").textContent = m.n;
+          document.getElementById("nGraze").textContent = m.graze.toLocaleString();
+          document.getElementById("chillBar").style.width = m.chill + "%";
+        } else if (m.t === "g"){
+          for (var j=0;j<m.grass.length && j<grass.length;j++) grass[j] = +m.grass[j];
+        } else if (m.t === "b"){
+          var bs = sheep[m.id]; if (bs) baas.push({ id:m.id, t: performance.now() });
+        }
+      }
+      connect();
+
+      // ---------- input ----------
+      function setPointerFromEvent(e){
+        var px = (e.touches ? e.touches[0].clientX : e.clientX);
+        var py = (e.touches ? e.touches[0].clientY : e.clientY);
+        var w = toWorld(px, py);
+        pointer.x = Math.max(0, Math.min(W, w.x));
+        pointer.y = Math.max(0, Math.min(H, w.y));
+        pointer.active = true;
+        hideHint();
+      }
+      addEventListener("pointermove", setPointerFromEvent, { passive:true });
+      addEventListener("pointerdown", function(e){ setPointerFromEvent(e); baa(); });
+      function baa(){ if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"baa" })); }
+      // stream pointer target to server, throttled
+      setInterval(function(){
+        if (ws && ws.readyState===1 && pointer.active){
+          ws.send(JSON.stringify({ t:"move", x:Math.round(pointer.x), y:Math.round(pointer.y) }));
+        }
+      }, 60);
+
+      var hintEl = document.getElementById("hint"), hintTimer = setTimeout(hideHint, 9000);
+      function hideHint(){ hintEl.classList.add("fade"); clearTimeout(hintTimer); }
+
+      // ---------- render ----------
+      var grassColors = buildGrassRamp();
+      function buildGrassRamp(){
+        // 0 = bare dirt -> 9 = lush green
+        var ramp = [];
+        for (var i=0;i<=9;i++){
+          var t = i/9;
+          var r = Math.round(120 - 66*t + (t<0.4?18:0));
+          var g = Math.round(78 + 92*t);
+          var b = Math.round(48 + 20*t);
+          ramp.push("rgb("+r+","+g+","+b+")");
+        }
+        return ramp;
+      }
+
+      function render(now){
+        // interpolate sheep toward latest server pos
+        var lf = reduce ? 1 : 0.18;
+        for (var id in sheep){ var s = sheep[id]; s.rx += (s.x - s.rx)*lf; s.ry += (s.y - s.ry)*lf; }
+
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.clearRect(0,0,cv.width,cv.height);
+        // base
+        ctx.fillStyle = "#3f5a2c"; ctx.fillRect(0,0,cv.width,cv.height);
+
+        // grass grid
+        for (var cy=0; cy<ROWS; cy++){
+          for (var cx=0; cx<COLS; cx++){
+            var v = grass[cy*COLS+cx]|0;
+            ctx.fillStyle = grassColors[v];
+            var x0 = toScreenX(cx*CW), y0 = toScreenY(cy*CH);
+            var x1 = toScreenX((cx+1)*CW), y1 = toScreenY((cy+1)*CH);
+            ctx.fillRect(x0, y0, x1-x0+1, y1-y0+1);
+          }
+        }
+        // subtle tuft texture on lush cells
+        ctx.strokeStyle = "rgba(30,60,20,.18)"; ctx.lineWidth = Math.max(1, view.s*1.2);
+        for (var cy2=0; cy2<ROWS; cy2++) for (var cx2=0; cx2<COLS; cx2++){
+          var vv = grass[cy2*COLS+cx2]|0; if (vv < 6) continue;
+          var gx = toScreenX((cx2+0.5)*CW), gy = toScreenY((cy2+0.7)*CH);
+          ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx - view.s*3, gy - view.s*7);
+          ctx.moveTo(gx, gy); ctx.lineTo(gx + view.s*3, gy - view.s*7); ctx.stroke();
+        }
+
+        // sheep sorted by y (painter's)
+        var ids = Object.keys(sheep).sort(function(a,b){ return sheep[a].ry - sheep[b].ry; });
+        for (var k=0;k<ids.length;k++) drawSheep(ids[k]);
+
+        // baa bubbles
+        for (var bi=baas.length-1; bi>=0; bi--){
+          var ba = baas[bi], age = (now - ba.t)/1200, ss = sheep[ba.id];
+          if (age >= 1 || !ss){ baas.splice(bi,1); continue; }
+          var bx = toScreenX(ss.rx), by = toScreenY(ss.ry) - view.s*70 - age*view.s*40;
+          ctx.globalAlpha = 1-age;
+          ctx.font = "700 "+(view.s*26)+"px "+"'Courier New',monospace"; ctx.fillStyle = "#fff";
+          ctx.textAlign = "center"; ctx.fillText("baa~", bx, by);
+          ctx.font = (view.s*22)+"px sans-serif"; ctx.fillText("💛", bx + view.s*24, by - view.s*6*Math.sin(age*6));
+          ctx.globalAlpha = 1;
+        }
+
+        // your cursor target marker
+        if (pointer.active){
+          var txs = toScreenX(pointer.x), tys = toScreenY(pointer.y);
+          ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = view.s*1.5;
+          ctx.beginPath(); ctx.arc(txs, tys, view.s*7 + Math.sin(now/300)*view.s*2, 0, 6.28); ctx.stroke();
+        }
+
+        requestAnimationFrame(render);
+      }
+
+      function drawSheep(id){
+        var s = sheep[id], info = roster[id] || { name:"", hue:0 };
+        var x = toScreenX(s.rx), y = toScreenY(s.ry), u = view.s;   // u = world->screen unit
+        var mine = (+id === myId);
+        var asleep = s.state === 3, grazing = s.state === 2, walking = s.state === 1;
+        var wob = walking && !reduce ? Math.sin(performance.now()/120 + id*1.3) * u*2 : 0;
+
+        // shadow
+        ctx.fillStyle = "rgba(20,35,15,.28)";
+        ctx.beginPath(); ctx.ellipse(x, y + u*10, u*20, u*7, 0, 0, 6.28); ctx.fill();
+
+        // legs
+        ctx.strokeStyle = "#6b5540"; ctx.lineWidth = u*3;
+        ctx.beginPath();
+        ctx.moveTo(x-u*8, y+u*6); ctx.lineTo(x-u*8, y+u*12);
+        ctx.moveTo(x+u*8, y+u*6); ctx.lineTo(x+u*8, y+u*12); ctx.stroke();
+
+        // fluffy body (cluster of circles)
+        ctx.fillStyle = mine ? "#fffdf5" : "#f3efe4";
+        var body = [[0,-2,17],[-11,-4,10],[11,-4,10],[-6,-12,10],[7,-12,10],[0,-16,9]];
+        for (var i=0;i<body.length;i++){ ctx.beginPath(); ctx.arc(x+body[i][0]*u+wob, y+body[i][1]*u, body[i][2]*u, 0, 6.28); ctx.fill(); }
+
+        // head (front-left), lowers when grazing
+        var hx = x - u*14 + wob, hy = y - (grazing ? u*2 : u*8);
+        ctx.fillStyle = "#42352a";
+        ctx.beginPath(); ctx.ellipse(hx, hy, u*7, u*8, -0.3, 0, 6.28); ctx.fill();
+        // ears
+        ctx.beginPath(); ctx.ellipse(hx-u*5, hy-u*4, u*3, u*2, -0.6, 0, 6.28);
+        ctx.ellipse(hx+u*2, hy-u*6, u*3, u*2, 0.4, 0, 6.28); ctx.fill();
+        // face
+        ctx.fillStyle = "#fff";
+        if (asleep){
+          ctx.strokeStyle = "#fff"; ctx.lineWidth = u*1.4;
+          ctx.beginPath(); ctx.moveTo(hx-u*4, hy-u*1); ctx.lineTo(hx-u*1, hy+u*1);
+          ctx.moveTo(hx+u*1, hy-u*1); ctx.lineTo(hx+u*4, hy+u*1); ctx.stroke();
+          // zzz
+          ctx.fillStyle = "#fff"; ctx.font = "700 "+(u*13)+"px 'Courier New',monospace"; ctx.textAlign="left";
+          var zt = (performance.now()/500)%1;
+          ctx.globalAlpha = 1-zt; ctx.fillText("z", x+u*8, y-u*20 - zt*u*14); ctx.globalAlpha = 1;
+        } else {
+          ctx.beginPath(); ctx.arc(hx-u*2, hy-u*1, u*1.6, 0, 6.28); ctx.arc(hx+u*3, hy-u*1, u*1.6, 0, 6.28); ctx.fill();
+        }
+
+        // your hat + ring
+        if (mine){
+          ctx.strokeStyle = "rgba(255,214,80,.9)"; ctx.lineWidth = u*2;
+          ctx.beginPath(); ctx.arc(x, y-u*2, u*24, 0, 6.28); ctx.stroke();
+          ctx.font = (u*20)+"px sans-serif"; ctx.textAlign="center"; ctx.fillText("🤠", hx, hy - u*10);
+        }
+
+        // name label
+        if (info.name){
+          ctx.font = "700 "+(u*11)+"px 'Courier New',monospace"; ctx.textAlign = "center";
+          ctx.fillStyle = "rgba(20,30,12,.55)"; ctx.fillText(info.name, x+1, y-u*26+1);
+          ctx.fillStyle = mine ? "#fff" : "hsl("+info.hue+",70%,88%)"; ctx.fillText(info.name, x, y-u*27);
+        }
+      }
+      requestAnimationFrame(render);
     })();
     </script>
