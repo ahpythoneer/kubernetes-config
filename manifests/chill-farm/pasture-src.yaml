@@ -29,6 +29,7 @@ data:
     const REGROW = 0.0022;               // grass regrow / tick
     const EAT = 0.05;                    // grass eaten / tick while grazing
     const SLEEP_AFTER = 6000;            // ms idle -> nap
+    const FREE_AFTER = 12000;           // ms idle -> sheep lives its own life (wander/graze/nap)
 
     const ADJ = ['Sleepy','Mellow','Drowsy','Cozy','Lazy','Breezy','Sunny','Woolly','Dozy','Serene','Comfy','Idle'];
     const NOUN = ['Dave','Sue','Pete','Lou','Meg','Hank','Gus','Bo','Nell','Cliff','Opal','Wade'];
@@ -55,8 +56,16 @@ data:
     function broadcast(obj) { const b = encode(JSON.stringify(obj)); for (const c of clients.values()) sendRaw(c, b); }
 
     // ---- HTTP + upgrade ----
+    function meadowChill() { let s = 0; for (let i = 0; i < grass.length; i++) s += grass[i]; return Math.round((s / grass.length) * 100); }
+
     const server = http.createServer((req, res) => {
-      if (req.url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
+      const url = req.url || '/';
+      if (url.endsWith('/healthz')) { res.writeHead(200); res.end('ok'); return; }
+      if (url.endsWith('/stats')) {
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
+        res.end(JSON.stringify({ sheep: clients.size, grazed: grazedTotal, chill: meadowChill() }));
+        return;
+      }
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.end('chill pasture :: ' + clients.size + ' sheep grazing');
     });
@@ -164,14 +173,35 @@ data:
       const step = SPEED * (TICK_MS / 1000);
 
       for (const c of clients.values()) {
+        const idle = now - c.lastInput;
+        // when the human wanders off, the sheep lives its own chill life:
+        // it moseys to nearby patches to graze, and now and then lies down for a nap.
+        if (idle > FREE_AFTER && (!c.nextWander || now > c.nextWander)) {
+          if (Math.random() < 0.35) {             // settle in right here for a nap
+            c.freeMode = 'nap'; c.tx = c.x; c.ty = c.y;
+            c.nextWander = now + 6000 + Math.random() * 7000;
+          } else {                                 // mosey to a fresh patch
+            c.freeMode = 'graze';
+            const a = Math.random() * 6.2832, r = 110 + Math.random() * 240;
+            c.tx = Math.max(24, Math.min(W - 24, c.x + Math.cos(a) * r));
+            c.ty = Math.max(24, Math.min(H - 24, c.y + Math.sin(a) * r));
+            c.nextWander = now + 5000 + Math.random() * 6000;
+          }
+        }
+
         const dx = c.tx - c.x, dy = c.ty - c.y;
         const d = Math.hypot(dx, dy);
-        if (d > 4) {                              // amble toward pointer
+        if (d > 4) {                              // amble toward target
           const m = Math.min(step, d);
           c.x += (dx / d) * m; c.y += (dy / d) * m;
           c.state = 1;                            // walk
-        } else if (now - c.lastInput > SLEEP_AFTER) {
-          c.state = 3;                            // sleep
+        } else if (idle > FREE_AFTER) {
+          if (c.freeMode === 'nap') { c.state = 3; }        // free-range nap
+          else { const gi = cellIndex(c.x, c.y);
+            if (grass[gi] > 0.3) { grass[gi] = Math.max(0, grass[gi] - EAT); grazedTotal++; c.state = 2; }
+            else c.state = 0; }
+        } else if (idle > SLEEP_AFTER) {
+          c.state = 3;                            // recent visitor idled -> nap
         } else {
           const gi = cellIndex(c.x, c.y);
           if (grass[gi] > 0.3) {                   // graze
@@ -188,9 +218,7 @@ data:
       // positions @ 10Hz
       const sheep = [];
       for (const c of clients.values()) sheep.push([c.id, Math.round(c.x), Math.round(c.y), c.state]);
-      let sum = 0; for (let i = 0; i < grass.length; i++) sum += grass[i];
-      const chill = Math.round((sum / grass.length) * 100);
-      broadcast({ t: 's', sheep, n: clients.size, chill, graze: grazedTotal });
+      broadcast({ t: 's', sheep, n: clients.size, chill: meadowChill(), graze: grazedTotal });
 
       // grass @ 2Hz
       if (frame % 5 === 0) broadcast({ t: 'g', grass: grassStr() });
