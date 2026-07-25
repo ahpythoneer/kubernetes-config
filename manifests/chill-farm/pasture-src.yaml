@@ -87,6 +87,22 @@ data:
     }));
     bots.forEach((b) => { b.tx = b.x; b.ty = b.y; });
 
+    // ---- The Train: a grumpy caged workaholic black sheep (set TRAIN_OFF=1 to remove) ----
+    const TRAIN_ON = !process.env.TRAIN_OFF;
+    const CAGE = { x: W * 0.82, y: H * 0.30 };
+    const TRAIN_CANNED = ["Back to work, all of you!", "This 'relaxing' is a productivity disaster.", "Deadlines don't meet themselves!", "A nap is a meeting with failure.", "Where are everyone's KPIs?!", "Idle hooves! Unacceptable.", "Synergize! Hustle! Grind!"];
+    let train = TRAIN_ON ? { id: 4000000, name: 'The Train', x: CAGE.x, y: CAGE.y, state: 0, lastSay: 0 } : null;
+    function trainSay(user) {
+      if (!train || Date.now() - train.lastSay < 5000) return;
+      train.lastSay = Date.now();
+      const sys = "You are The Train, a grumpy black sheep obsessed with work, hustle, deadlines, KPIs, and productivity. You've been put in a cage at Chill Farm (a ranch where everyone relaxes) because you wouldn't stop pushing everyone to work, and you resent all this chill. Reply with only ONE short, grumpy, workaholic one-liner under 14 words. No quotes, no preamble, no emojis.";
+      askLLM(sys, user).then((line) => {
+        if (!train) return;
+        lastSayAt = Date.now();
+        broadcast({ t: 'say', id: train.id, text: line || TRAIN_CANNED[(Math.random() * TRAIN_CANNED.length) | 0] });
+      });
+    }
+
     // ---- persistence: chill points, saved sheep, and the guestbook ----
     const DATA_FILE = process.env.DATA_FILE || '/data/state.json';
     const profiles = new Map();          // token -> { name, color, hat, points, first, last }
@@ -261,7 +277,13 @@ data:
     setInterval(() => {
       if (meeting || Date.now() - lastSayAt < 6500) return;
       const idx = (Math.random() * EXECS.length) | 0;
-      const people = [...clients.values()];
+      // The Train grumbles, or an exec takes a dig at it
+      if (train && Math.random() < 0.3) {
+        if (Math.random() < 0.5) trainSay('Grumble a grumpy one-liner demanding everyone stop relaxing and get back to work.');
+        else execSay(idx, 'Take a playful, chill dig at The Train — the grumpy caged workaholic sheep who keeps demanding productivity and KPIs. One light-hearted line.');
+        return;
+      }
+      const people = [...clients.values()].filter((c) => !c.spectator);
       if (people.length && Math.random() < 0.35) {
         const v = people[(Math.random() * people.length) | 0];
         execSay(idx, `Address a visitor named ${v.name}${lookDesc(v)} directly with one warm, playful, chill line. You may gently mention their look.`, v.id);
@@ -402,20 +424,28 @@ data:
         if (typeof m.name === 'string' && m.name.trim()) {
           c.name = m.name.slice(0, 18).replace(/[^\w \-!]/g, '') || c.name;
         }
-        // load (or create) this browser's saved profile: points, title, look
+        // load (or create) this browser's saved profile: points, title, look, memory
+        let returning = false, mem = null;
         if (c.token) {
+          returning = profiles.has(c.token);
           let p = profiles.get(c.token);
           if (!p) { p = { name: c.name, color: -1, hat: '', points: 0, first: Date.now(), last: Date.now() }; profiles.set(c.token, p); }
           if (p.name && !(typeof m.name === 'string' && m.name.trim())) c.name = p.name;
           if (typeof p.color === 'number') c.color = p.color;
           if (p.hat) c.hat = p.hat;
           c.points = p.points || 0; c.title = titleFor(c.points);
+          mem = p.memory || null;
           p.last = Date.now(); scheduleSave();
         }
         broadcastRoster();
-        // an exec occasionally greets the newcomer by name (and ambles over)
-        if (Date.now() - lastSayAt > 8000 && Math.random() < 0.6) {
-          execSay((Math.random() * EXECS.length) | 0, `A visitor named ${c.name}${lookDesc(c)} just wandered into the meadow. Greet them by name, warm and chill, one short line; you may gently mention their look.`, c.id);
+        // an exec occasionally greets — remembering returning visitors and what they last asked
+        if (Date.now() - lastSayAt > 8000 && Math.random() < 0.65) {
+          const gi = (Math.random() * EXECS.length) | 0;
+          let prompt;
+          if (returning && mem) prompt = `A returning visitor named ${c.name}${lookDesc(c)} is back. Last time they asked you: "${mem}". Greet them back warmly by name and playfully reference that. One short line.`;
+          else if (returning) prompt = `A returning visitor named ${c.name}${lookDesc(c)} is back at the meadow. Welcome them BACK by name, warm and chill. One short line.`;
+          else prompt = `A visitor named ${c.name}${lookDesc(c)} just wandered into the meadow. Greet them by name, warm and chill, one short line; you may gently mention their look.`;
+          execSay(gi, prompt, c.id);
         }
         return;
       }
@@ -454,11 +484,16 @@ data:
       } else if (m.t === 'spectate') {
         c.spectator = true;                               // read-only meadow-cam: no sheep, not counted
         broadcastRoster();
+      } else if (m.t === 'train') {
+        if (!train || Date.now() - (c.lastPoke || 0) < 3000) return;
+        c.lastPoke = Date.now();
+        trainSay(`A visitor named ${c.name} just poked your cage. Snap back grumpily about how they should be working instead of relaxing, one line.`);
       } else if (m.t === 'ask') {
         const q = String(m.q || '').replace(/[\x00-\x1f\x7f]/g, '').slice(0, 140).trim();
         const idx = bots.findIndex((b) => b.id === m.id);
         if (idx < 0 || !q || Date.now() - (c.lastAsk || 0) < 6000) return;   // per-visitor cooldown
         c.lastAsk = Date.now();
+        if (c.token) { const p = profiles.get(c.token); if (p) p.memory = q.slice(0, 80); scheduleSave(); }   // execs remember what you asked
         broadcast({ t: 'q', id: c.id, text: q });                            // show the question above the asker
         const e = EXECS[idx];
         walkExecTo(idx, c.id);
@@ -474,6 +509,7 @@ data:
       const r = {};
       for (const c of clients.values()) { if (c.spectator) continue; r[c.id] = [c.name, c.hue, '', (c.color == null ? -1 : c.color), c.hat || '', c.points || 0, c.title || titleFor(c.points || 0)]; }
       for (const b of bots) r[b.id] = [b.name, b.hue, b.role, -1, '', 0, ''];
+      if (train) r[train.id] = [train.name, 0, 'TRAIN', -1, '', 0, ''];
       broadcast({ t: 'r', roster: r });
     }
     function sendGrass(c) { send(c, { t: 'g', grass: grassStr() }); }
@@ -555,6 +591,7 @@ data:
       const sheep = [];
       for (const c of clients.values()) { if (c.spectator) continue; sheep.push([c.id, Math.round(c.x), Math.round(c.y), c.state, 0]); }
       for (let i = 0; i < bots.length; i++) { const b = bots[i]; sheep.push([b.id, Math.round(b.x), Math.round(b.y), b.state, i + 1]); }
+      if (train) sheep.push([train.id, Math.round(train.x), Math.round(train.y), train.state, 99]);
       broadcast({ t: 's', sheep, n: realCount(), chill: meadowChill(), graze: grazedTotal, w: weather, mt: +mh.toFixed(2) });
 
       // grass @ 2Hz
