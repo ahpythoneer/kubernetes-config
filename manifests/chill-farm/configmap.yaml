@@ -441,6 +441,7 @@ data:
           <div class="dd-menu">
             <a href="/pasture/">🐑 The Pasture</a>
             <a href="/ranch/">🌙 The Ranch</a>
+            <a href="/pond/">🎣 The Pond</a>
           </div>
         </div>
         <a href="#hire" class="hire-link">We're Hiring</a>
@@ -1250,6 +1251,7 @@ data:
           <div class="dd-menu">
             <a href="/pasture/">🐑 The Pasture</a>
             <a href="/ranch/">🌙 The Ranch</a>
+            <a href="/pond/">🎣 The Pond</a>
           </div>
         </div>
         <button class="theme-toggle" id="themeBtn" aria-label="Change the time of day" title="Sunrise / Sunset">🌤️</button>
@@ -1606,7 +1608,8 @@ data:
       <a class="brand" href="/"><span class="badge">🐑</span> The Commons</a>
       <div style="display:flex;flex-direction:column;align-items:flex-end;">
         <div class="stats">
-          <a class="chip" href="/ranch/" style="text-decoration:none">🌙 The Ranch →</a>
+          <a class="chip" href="/ranch/" style="text-decoration:none">🌙 Ranch</a>
+          <a class="chip" href="/pond/" style="text-decoration:none">🎣 Pond</a>
           <button class="chip" id="custBtn" style="cursor:pointer" title="Customize your sheep">✎ your sheep</button>
           <button class="chip" id="bookBtn" style="cursor:pointer" title="The fence guestbook">📖 fence</button>
           <button class="chip" id="voiceBtn" style="cursor:pointer" title="Let the sheep speak">🗣️ voice</button>
@@ -2508,6 +2511,7 @@ data:
       <a class="brand" href="/"><span class="badge">🌙</span> The Ranch</a>
       <nav>
         <a href="/pasture/">Pasture</a>
+        <a href="/pond/">Pond</a>
         <a href="/">Home</a>
         <button id="voiceBtn" class="count" style="cursor:pointer;font-family:var(--mono);font-size:.76rem">🗣️ voice</button>
         <button id="sndBtn" class="count" style="cursor:pointer;font-family:var(--mono);font-size:.76rem">🔈 sound</button>
@@ -2685,6 +2689,259 @@ data:
           if (audio.master) audio.master.gain.setTargetAtTime(0, audio.ac.currentTime, 0.3);
           sndBtn.textContent = "🔈 sound";
         }
+      });
+    })();
+    </script>
+  pond.html: |
+    <meta charset="utf-8" />
+    <title>The Pond — Chill Farm</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="description" content="A lazy fishing pond where the whole point is to catch nothing. Cast a line, wait, and relax at Chill Farm." />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#4a7a86" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="icon" href="/icon-192.png" />
+    <script>if("serviceWorker" in navigator)addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){});});</script>
+    <style>
+      :root{
+        --wheat:#d9a441; --wheat-deep:#b5822c; --saddle:#7a4a26; --saddle-dk:#3a2416; --terra:#c15a34;
+        --ink:#22303a; --ink-soft:#5c6f78; --card:#eaf3f2;
+        --display:"Rockwell","Rockwell Nova","Roboto Slab","Courier New",Georgia,serif;
+        --body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+        --mono:"Courier New",ui-monospace,monospace;
+        --ease:cubic-bezier(.22,.61,.36,1);
+      }
+      *{box-sizing:border-box;}
+      html,body{margin:0;height:100%;overflow:hidden;font-family:var(--body);color:#eaf3f2;background:#6a9a6a;-webkit-text-size-adjust:100%;}
+      canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;}
+
+      .top{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:.6rem;
+        padding:.7rem 1rem;background:linear-gradient(180deg,rgba(20,40,45,.5),transparent);}
+      .brand{display:flex;align-items:center;gap:.5rem;font-family:var(--display);font-size:1.05rem;letter-spacing:.03em;color:#fff;text-decoration:none;text-shadow:0 2px 4px rgba(0,0,0,.5);}
+      .brand .badge{width:26px;height:26px;display:grid;place-items:center;background:var(--wheat);color:var(--saddle-dk);border-radius:50%;font-size:1rem;box-shadow:inset 0 0 0 2px var(--saddle-dk);}
+      .top nav{display:flex;gap:.9rem;align-items:center;font-family:var(--mono);font-size:.76rem;letter-spacing:.08em;text-transform:uppercase;}
+      .top nav a{color:#eaf3f2;text-decoration:none;opacity:.85;}
+      .top nav a:hover{opacity:1;}
+      .chip{background:rgba(20,40,45,.55);border:1px solid rgba(217,164,65,.5);border-radius:30px;padding:.3rem .7rem;color:#ffe6ad;white-space:nowrap;cursor:pointer;font:inherit;}
+      .chip b{color:#fff;}
+
+      .castbtn{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:20;font-family:var(--display);
+        text-transform:uppercase;letter-spacing:.05em;font-size:1.05rem;color:#f4ead0;background:var(--terra);
+        border:2px solid var(--saddle-dk);border-radius:40px;padding:.8rem 2rem;cursor:pointer;box-shadow:0 6px 0 var(--saddle-dk);
+        transition:transform .15s var(--ease),box-shadow .15s,background .3s;}
+      .castbtn:active{transform:translateX(-50%) translateY(5px);box-shadow:0 1px 0 var(--saddle-dk);}
+      .castbtn.waiting{background:var(--saddle);}
+
+      .log{position:fixed;right:12px;bottom:12px;z-index:15;width:min(280px,84vw);max-height:34vh;overflow-y:auto;
+        background:rgba(20,40,45,.66);border:1px solid rgba(217,164,65,.4);border-radius:14px;padding:.6rem .8rem;
+        backdrop-filter:blur(4px);font-family:var(--mono);font-size:.74rem;line-height:1.5;color:#dfeceb;}
+      .log h4{margin:0 0 .4rem;font-family:var(--display);font-size:.9rem;color:#ffe6ad;text-transform:uppercase;letter-spacing:.04em;}
+      .log .row b{color:#ffd98a;}
+      @media (max-width:560px){ .log{max-height:26vh;width:74vw;} }
+
+      .hint{position:fixed;left:50%;bottom:82px;transform:translateX(-50%);z-index:15;pointer-events:none;
+        background:rgba(20,40,45,.55);color:#dfeceb;border:1px solid rgba(217,164,65,.35);border-radius:30px;
+        padding:.4rem 1rem;font-family:var(--mono);font-size:.72rem;letter-spacing:.04em;text-align:center;max-width:90vw;transition:opacity 1s var(--ease);}
+      .hint.fade{opacity:0;}
+
+      .conn{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:rgba(20,40,45,.8);color:#ffe6ad;
+        font-family:var(--mono);text-align:center;padding:1.5rem;transition:opacity .5s;}
+      .conn.hide{opacity:0;pointer-events:none;}
+      .conn .big{font-family:var(--display);font-size:1.6rem;text-transform:uppercase;margin-bottom:.4rem;color:#fff;}
+    </style>
+
+    <canvas id="c"></canvas>
+
+    <header class="top">
+      <a class="brand" href="/"><span class="badge">🎣</span> The Pond</a>
+      <nav>
+        <a href="/pasture/">Pasture</a>
+        <a href="/ranch/">Ranch</a>
+        <button class="chip" id="sndBtn" title="Pond ambience">🔈 sound</button>
+        <span class="chip" style="cursor:default">🎣 <b id="count">–</b> fishin'</span>
+      </nav>
+    </header>
+
+    <div class="hint" id="hint">tap the water (or the button) to cast a line · the whole point is to catch nothing · relax</div>
+    <button class="castbtn" id="castbtn">🎣 Cast a line</button>
+
+    <div class="log" id="log"><h4>🐟 The Catch Log</h4><div id="logrows"></div></div>
+
+    <div class="conn" id="conn"><div><div class="big">🎣 finding the pond…</div><div id="connMsg">wading out to a good spot</div></div></div>
+
+    <script>
+    (function(){
+      "use strict";
+      var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      var cv = document.getElementById("c"), ctx = cv.getContext("2d");
+      var W = 1000, H = 620, PCX = 500, PCY = 300, PRX = 400, PRY = 210, SPOTS = 14;
+      var anglers = {}, myId = null, myCasting = false, catchPops = [], lilies = [];
+      var connEl = document.getElementById("conn"), connMsg = document.getElementById("connMsg");
+      var countEl = document.getElementById("count"), castbtn = document.getElementById("castbtn");
+      var logrows = document.getElementById("logrows");
+
+      var view = { s:1, ox:0, oy:0, dpr:1 };
+      function resize(){
+        var dpr = Math.min(window.devicePixelRatio||1, 2); view.dpr = dpr;
+        cv.width = Math.floor(innerWidth*dpr); cv.height = Math.floor(innerHeight*dpr);
+        var s = Math.max(cv.width/W, cv.height/H); view.s = s; view.ox = (cv.width-W*s)/2; view.oy = (cv.height-H*s)/2;
+      }
+      addEventListener("resize", resize); resize();
+      function X(x){ return view.ox + x*view.s; } function Y(y){ return view.oy + y*view.s; }
+      function toWorld(px,py){ return { x:(px*view.dpr - view.ox)/view.s, y:(py*view.dpr - view.oy)/view.s }; }
+      for (var i=0;i<7;i++) lilies.push({ a:Math.random()*6.28, r:0.45+Math.random()*0.4, ph:Math.random()*6 });
+
+      function bankPos(slot){
+        var a = (slot%SPOTS)/SPOTS*Math.PI*2 - Math.PI/2;
+        var ring = 1.16 + Math.floor(slot/SPOTS)*0.16;
+        return { x: PCX+Math.cos(a)*PRX*ring, y: PCY+Math.sin(a)*PRY*ring, a:a };
+      }
+
+      // ---------- websocket ----------
+      var ws, retry=0, replaced=false;
+      var token; try{ token=localStorage.getItem("chillId"); if(!token){ token="p"+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("chillId",token);} }catch(e){ token="p"+Math.random().toString(36).slice(2); }
+      var myName=null; try{ myName=localStorage.getItem("chill-name")||null; }catch(e){}
+      function connect(){
+        if (replaced) return;
+        var proto = location.protocol==="https:"?"wss":"ws";
+        try{ ws=new WebSocket(proto+"://"+location.host+"/pw"); }catch(e){ return retryFn(); }
+        ws.onopen=function(){ retry=0; connEl.classList.add("hide"); ws.send(JSON.stringify({t:"hello",token:token,name:myName||undefined})); };
+        ws.onclose=function(ev){ if(ev&&ev.code===4001){ replaced=true; connEl.classList.remove("hide"); connEl.querySelector(".big").textContent="🎣 Already fishin'"; connMsg.textContent="You're at the pond in another tab. Refresh here to take your spot back."; return; }
+          connEl.classList.remove("hide"); connMsg.textContent="reconnecting…"; retryFn(); };
+        ws.onerror=function(){ try{ws.close();}catch(e){} };
+        ws.onmessage=function(ev){ onMsg(ev.data); };
+      }
+      function retryFn(){ if(replaced)return; retry=Math.min(retry+1,6); setTimeout(connect,600*retry); }
+      function onMsg(data){
+        var m; try{ m=JSON.parse(data); }catch(e){ return; }
+        if (m.t==="welcome"){ myId=m.id; }
+        else if (m.t==="r"){
+          var seen={};
+          for (var i=0;i<m.anglers.length;i++){ var a=m.anglers[i]; seen[a.id]=1;
+            var g=anglers[a.id]; if(!g){ g=anglers[a.id]={ rx:a.bx||PCX, ry:a.by||PCY }; }
+            g.name=a.name; g.hue=a.hue; g.slot=a.slot; g.casting=a.casting; g.bx=a.bx; g.by=a.by;
+            if(a.id===myId){ myCasting=a.casting; updateCastBtn(); }
+          }
+          for (var id in anglers) if(!seen[id]) delete anglers[id];
+          countEl.textContent=m.n;
+        }
+        else if (m.t==="log"){ catchLog=m.entries||[]; renderLog(); }
+        else if (m.t==="catch"){
+          catchLog.push({name:m.name,catch:m.catch,ts:Date.now()}); if(catchLog.length>30)catchLog.shift(); renderLog();
+          var ang=anglers[m.id]; if(ang) catchPops.push({ id:m.id, text:m.catch, t:performance.now() });
+        }
+      }
+      connect();
+
+      var catchLog=[];
+      function renderLog(){
+        logrows.innerHTML="";
+        for (var i=Math.max(0,catchLog.length-14);i<catchLog.length;i++){ var e=catchLog[i];
+          var d=document.createElement("div"); d.className="row"; var b=document.createElement("b"); b.textContent=e.name;
+          d.appendChild(b); d.appendChild(document.createTextNode(" caught "+e.catch)); logrows.appendChild(d); }
+        logrows.scrollTop=logrows.scrollHeight;
+      }
+
+      // ---------- interaction ----------
+      function cast(){ if(ws&&ws.readyState===1&&!myCasting) ws.send(JSON.stringify({t:"cast"})); }
+      function reel(){ if(ws&&ws.readyState===1&&myCasting) ws.send(JSON.stringify({t:"reel"})); }
+      function updateCastBtn(){ castbtn.textContent = myCasting ? "🎣 Reel in" : "🎣 Cast a line"; castbtn.classList.toggle("waiting", myCasting); }
+      castbtn.addEventListener("click", function(){ myCasting ? reel() : cast(); });
+      var hintEl=document.getElementById("hint"), hintT=setTimeout(function(){ hintEl.classList.add("fade"); }, 9000);
+      cv.addEventListener("pointerdown", function(){ hintEl.classList.add("fade"); if(!myCasting) cast(); });
+
+      // ---------- render ----------
+      function render(now){
+        for (var id in anglers){ var g=anglers[id]; if(g.casting){ g.rx += ((g.bx)-g.rx)*0.2; g.ry += ((g.by)-g.ry)*0.2; } }
+        ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height);
+        // grass banks
+        var gg=ctx.createLinearGradient(0,0,0,cv.height); gg.addColorStop(0,"#7ba85c"); gg.addColorStop(1,"#5f8a4a");
+        ctx.fillStyle=gg; ctx.fillRect(0,0,cv.width,cv.height);
+        // pond water
+        var wx=X(PCX), wy=Y(PCY), wrx=PRX*view.s, wry=PRY*view.s;
+        var wg=ctx.createRadialGradient(wx,wy-wry*0.3,wry*0.2,wx,wy,wrx);
+        wg.addColorStop(0,"#8fd0d6"); wg.addColorStop(.7,"#4f9aa8"); wg.addColorStop(1,"#3d7a88");
+        ctx.fillStyle=wg; ctx.beginPath(); ctx.ellipse(wx,wy,wrx,wry,0,0,6.28); ctx.fill();
+        // ripples
+        if(!reduce){ ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=Math.max(1,view.s*1.5);
+          for(var r=0;r<3;r++){ var rr=((now/2500+r/3)%1); ctx.globalAlpha=(1-rr)*0.5; ctx.beginPath(); ctx.ellipse(wx,wy,wrx*(0.3+rr*0.7),wry*(0.3+rr*0.7),0,0,6.28); ctx.stroke(); }
+          ctx.globalAlpha=1; }
+        // lily pads
+        for(var li=0;li<lilies.length;li++){ var L=lilies[li]; var lx=X(PCX+Math.cos(L.a)*PRX*L.r), ly=Y(PCY+Math.sin(L.a)*PRY*L.r);
+          ctx.fillStyle="#5bab63"; ctx.beginPath(); ctx.ellipse(lx,ly,view.s*14,view.s*11,L.ph,0,6.28); ctx.fill();
+          ctx.fillStyle="#f5b8d0"; ctx.beginPath(); ctx.arc(lx+view.s*3,ly-view.s*2,view.s*3,0,6.28); ctx.fill(); }
+
+        // anglers + lines + bobbers, sorted by y
+        var ids=Object.keys(anglers).sort(function(a,b){ return bankPos(anglers[a].slot).y - bankPos(anglers[b].slot).y; });
+        for (var k=0;k<ids.length;k++) drawAngler(ids[k], now);
+
+        // catch pops
+        for (var ci=catchPops.length-1;ci>=0;ci--){ var cp=catchPops[ci], age=(now-cp.t)/3400, ang=anglers[cp.id];
+          if(age>=1||!ang){ catchPops.splice(ci,1); continue; }
+          var px=X(ang.casting?ang.rx:bankPos(ang.slot).x), py=Y((ang.casting?ang.ry:bankPos(ang.slot).y)) - view.s*24 - age*view.s*40;
+          ctx.globalAlpha=age<.1?age/.1:(age>.75?(1-age)/.25:1);
+          ctx.font="600 "+(view.s*15)+"px system-ui,sans-serif"; ctx.textAlign="center";
+          ctx.fillStyle="#fff"; ctx.strokeStyle="rgba(20,50,55,.6)"; ctx.lineWidth=view.s*3;
+          ctx.strokeText("“"+cp.text+"”", px, py); ctx.fillText("“"+cp.text+"”", px, py);
+          ctx.globalAlpha=1;
+        }
+        requestAnimationFrame(render);
+      }
+
+      function drawAngler(id, now){
+        var g=anglers[id], bp=bankPos(g.slot), x=X(bp.x), y=Y(bp.y), u=view.s, mine=(+id===myId);
+        var facing = Math.cos(bp.a) < 0 ? -1 : 1;   // face toward the pond centre
+        // shadow
+        ctx.fillStyle="rgba(20,50,20,.2)"; ctx.beginPath(); ctx.ellipse(x,y+u*13,u*15,u*5,0,0,6.28); ctx.fill();
+        // fishing line + bobber
+        if (g.casting){
+          var rodTipX=x+facing*u*16, rodTipY=y-u*14, bxx=X(g.rx), byy=Y(g.ry);
+          ctx.strokeStyle="rgba(255,255,255,.6)"; ctx.lineWidth=Math.max(1,u*0.8);
+          ctx.beginPath(); ctx.moveTo(rodTipX,rodTipY); ctx.lineTo(bxx,byy); ctx.stroke();
+          var bob=Math.sin(now/500+id)*u*1.5;
+          // bobber ripple
+          ctx.strokeStyle="rgba(255,255,255,.25)"; ctx.beginPath(); ctx.ellipse(bxx,byy+bob+u*3,u*6,u*2.5,0,0,6.28); ctx.stroke();
+          ctx.fillStyle="#e0554a"; ctx.beginPath(); ctx.arc(bxx,byy+bob,u*3.5,Math.PI,0); ctx.fill();
+          ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(bxx,byy+bob,u*3.5,0,Math.PI); ctx.fill();
+        }
+        // body
+        ctx.fillStyle = "hsl("+g.hue+",45%,"+(mine?"62%":"55%")+")";
+        ctx.beginPath(); ctx.ellipse(x,y,u*11,u*13,0,0,6.28); ctx.fill();
+        // head
+        ctx.fillStyle="#e8c9a0"; ctx.beginPath(); ctx.arc(x,y-u*15,u*6,0,6.28); ctx.fill();
+        // straw hat
+        ctx.fillStyle="#d8b878"; ctx.beginPath(); ctx.ellipse(x,y-u*19,u*10,u*3,0,0,6.28); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x,y-u*22,u*5,u*4,0,0,6.28); ctx.fill();
+        // rod
+        ctx.strokeStyle="#7a5230"; ctx.lineWidth=u*1.6;
+        ctx.beginPath(); ctx.moveTo(x+facing*u*4,y+u*2); ctx.lineTo(x+facing*u*16,y-u*14); ctx.stroke();
+        // your ring
+        if (mine){ ctx.strokeStyle="rgba(255,214,80,.9)"; ctx.lineWidth=u*2; ctx.beginPath(); ctx.arc(x,y-u*2,u*22,0,6.28); ctx.stroke(); }
+        // name
+        if (g.name){ ctx.font="700 "+(u*10)+"px 'Courier New',monospace"; ctx.textAlign="center";
+          ctx.fillStyle="rgba(10,30,30,.5)"; ctx.fillText(g.name,x+1,y+u*28+1);
+          ctx.fillStyle=mine?"#fff":"hsl("+g.hue+",70%,85%)"; ctx.fillText(g.name,x,y+u*28); }
+      }
+      requestAnimationFrame(render);
+
+      // ---------- opt-in pond ambience: gentle water + birds ----------
+      var audio={on:false,ac:null,master:null,timer:0};
+      function buildAudio(){ var AC=window.AudioContext||window.webkitAudioContext; if(!AC)return false; var ac=new AC(); audio.ac=ac;
+        var master=ac.createGain(); master.gain.value=0; master.connect(ac.destination); audio.master=master;
+        var buf=ac.createBuffer(1,Math.floor(ac.sampleRate*2),ac.sampleRate),d=buf.getChannelData(0);
+        for(var i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*0.5;
+        var src=ac.createBufferSource(); src.buffer=buf; src.loop=true;
+        var lp=ac.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=360;
+        var wg=ac.createGain(); wg.gain.value=0.05; src.connect(lp); lp.connect(wg); wg.connect(master); src.start(); return true; }
+      function bird(){ var ac=audio.ac; if(!ac||!audio.on)return; var t=ac.currentTime;
+        var o=ac.createOscillator(),g=ac.createGain(); o.type="sine"; o.connect(g); g.connect(audio.master);
+        o.frequency.setValueAtTime(1800+Math.random()*500,t); o.frequency.linearRampToValueAtTime(2400,t+0.08); o.frequency.linearRampToValueAtTime(2000,t+0.16);
+        g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.05,t+0.02); g.gain.linearRampToValueAtTime(0,t+0.22); o.start(t); o.stop(t+0.24);
+        audio.timer=setTimeout(bird, 4000+Math.random()*7000); }
+      document.getElementById("sndBtn").addEventListener("click", function(){
+        var b=document.getElementById("sndBtn");
+        if(!audio.on){ if(!audio.ac&&!buildAudio())return; if(audio.ac.state==="suspended")audio.ac.resume(); audio.on=true; audio.master.gain.setTargetAtTime(0.6,audio.ac.currentTime,0.4); b.textContent="🔊 sound"; bird(); }
+        else { audio.on=false; clearTimeout(audio.timer); if(audio.master)audio.master.gain.setTargetAtTime(0,audio.ac.currentTime,0.3); b.textContent="🔈 sound"; }
       });
     })();
     </script>
