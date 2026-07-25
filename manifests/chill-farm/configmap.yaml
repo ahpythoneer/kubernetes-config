@@ -5,6 +5,8 @@ metadata:
   namespace: chill-farm
   labels:
     app: chill-farm
+  annotations:
+    argocd.argoproj.io/sync-options: ServerSideApply=true
 data:
   index.html: |
     <meta charset="utf-8" />
