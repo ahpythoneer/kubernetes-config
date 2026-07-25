@@ -58,6 +58,7 @@ data:
     let weather = 0;                                     // 0 clear, 1 cloudy, 2 rain (shared for everyone)
     let weatherUntil = 0;
     let lastMh = 12;                                      // previous meadow hour, for detecting midnight
+    let baaTimes = [], lastSummon = 0;                    // collective baa -> summon the rain
     function stepWeather(now) {
       if (now < weatherUntil) return;
       const r = Math.random();
@@ -123,6 +124,37 @@ data:
       if (forecast.date !== todayStr()) genForecast();
       return forecast.text || "Today's forecast: 100% chill, with a gentle chance of naps.";
     }
+
+    // daily chill challenge (one completable task/day; earns a badge + bonus chill)
+    const CHALLENGE_TYPES = [
+      { type: 'nap', desc: 'take a nap in the meadow (stand still a while)' },
+      { type: 'carve', desc: 'carve a note on the fence' },
+      { type: 'baa', desc: 'let out a hearty baa' },
+      { type: 'poke', desc: 'go say hi to The Train' },
+      { type: 'emote', desc: 'send an emote to the herd' },
+      { type: 'ask', desc: 'ask one of the execs a question' },
+    ];
+    let challenge = { date: '', type: '', text: '' };
+    let challengeGen = false;
+    function genChallenge() {
+      if (challengeGen || !AI_ON) return; challengeGen = true;
+      const pick = CHALLENGE_TYPES[(Math.random() * CHALLENGE_TYPES.length) | 0];
+      const sys = 'You are Chill Farm\'s daily challenge-master. Write today\'s whimsical, cozy CHILL CHALLENGE in one short playful sentence under 16 words, based on this task: ' + pick.desc + '. Start with an action verb. No preamble, no quotes, no emojis.';
+      askLLM(sys, "Write today's chill challenge.", 140, 60).then((line) => {
+        challengeGen = false;
+        challenge = { date: todayStr(), type: pick.type, text: line || ('Today: ' + pick.desc + '.') };
+        scheduleSave();
+      }).catch(() => { challengeGen = false; });
+    }
+    function getChallenge() { if (challenge.date !== todayStr()) genChallenge(); return challenge; }
+    function completeChallenge(c, type) {
+      if (!c.token || !challenge.date || challenge.type !== type) return;
+      const p = profiles.get(c.token); if (!p || p.challengeDone === challenge.date) return;
+      p.challengeDone = challenge.date; p.badges = (p.badges || 0) + 1; p.points = (p.points || 0) + 10;
+      c.points = p.points; c.title = titleFor(p.points); c.badges = p.badges;
+      scheduleSave(); broadcastRoster();
+      send(c, { t: 'challenge-done', badges: p.badges });
+    }
     function titleFor(p) {
       if (p >= 400) return 'Zen Master of Chill';
       if (p >= 150) return 'Certified Cloud-Watcher';
@@ -136,6 +168,7 @@ data:
         if (j.profiles) for (const k in j.profiles) profiles.set(k, j.profiles[k]);
         if (Array.isArray(j.guestbook)) guestbook = j.guestbook.slice(-60);
         if (j.forecast) forecast = j.forecast;
+        if (j.challenge) challenge = j.challenge;
         console.log('loaded state: ' + profiles.size + ' profiles, ' + guestbook.length + ' carvings');
       } catch (e) { console.log('no saved state (' + (e.code || e.message) + ') — starting fresh'); }
     })();
@@ -143,7 +176,7 @@ data:
     function scheduleSave() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; doSave(); }, 3000); }
     function doSave() {
       try {
-        const obj = { profiles: {}, guestbook, forecast };
+        const obj = { profiles: {}, guestbook, forecast, challenge };
         for (const [k, v] of profiles) obj.profiles[k] = v;
         fs.writeFileSync(DATA_FILE, JSON.stringify(obj));
       } catch (e) { /* read-only / missing volume: degrade to in-memory */ }
@@ -240,6 +273,7 @@ data:
       }).then(() => console.log('ollama warm')).catch(() => console.log('ollama warm failed (will use canned lines)'));
     }
     setTimeout(getForecast, 6000);                        // warm today's chill forecast shortly after boot
+    setTimeout(getChallenge, 7000);                       // warm today's challenge too
 
     // ---- the execs occasionally hold a (useless) board meeting at the campfire ----
     const MEETING_TOPICS = ['Q3 Nap Strategy', 'Should we hire a cloud?', 'Optimizing the sunset', 'Hammock Capacity Planning', 'The Lemonade Roadmap', 'Whether Tuesdays are necessary', 'Migrating to a slower pace', 'The Great Snack Audit'];
@@ -330,6 +364,14 @@ data:
         const text = getForecast();
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
         res.end(JSON.stringify({ text, date: forecast.date }));
+        return;
+      }
+      if (url.endsWith('/leaderboard')) {
+        const list = [...profiles.values()].filter((p) => (p.points || 0) > 0)
+          .sort((a, b) => (b.points || 0) - (a.points || 0)).slice(0, 10)
+          .map((p) => ({ name: p.name, points: p.points || 0, title: titleFor(p.points || 0), badges: p.badges || 0 }));
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
+        res.end(JSON.stringify(list));
         return;
       }
       res.writeHead(200, { 'content-type': 'text/plain' });
@@ -433,11 +475,12 @@ data:
           if (p.name && !(typeof m.name === 'string' && m.name.trim())) c.name = p.name;
           if (typeof p.color === 'number') c.color = p.color;
           if (p.hat) c.hat = p.hat;
-          c.points = p.points || 0; c.title = titleFor(c.points);
+          c.points = p.points || 0; c.title = titleFor(c.points); c.badges = p.badges || 0;
           mem = p.memory || null;
           p.last = Date.now(); scheduleSave();
         }
         broadcastRoster();
+        { const p2 = c.token && profiles.get(c.token); send(c, { t: 'challenge', text: getChallenge().text, done: !!(p2 && p2.challengeDone === challenge.date) }); }
         // an exec occasionally greets — remembering returning visitors and what they last asked
         if (Date.now() - lastSayAt > 8000 && Math.random() < 0.65) {
           const gi = (Math.random() * EXECS.length) | 0;
@@ -457,6 +500,14 @@ data:
         }
       } else if (m.t === 'baa') {
         broadcast({ t: 'b', id: c.id });
+        completeChallenge(c, 'baa');
+        // collective baa summons the rain
+        const bn = Date.now();
+        baaTimes.push(bn); baaTimes = baaTimes.filter((t) => bn - t < 9000);
+        if (baaTimes.length >= 5 && bn - lastSummon > 90000 && weather !== 2) {
+          lastSummon = bn; baaTimes = []; weather = 2; weatherUntil = bn + 32000;
+          broadcast({ t: 'event', kind: 'summon-rain' });
+        }
         if (Date.now() - lastSayAt > 9000 && Math.random() < 0.25) {
           execSay((Math.random() * EXECS.length) | 0, 'A sheep just let out a loud "baa". React with one chill, amused one-liner.');
         }
@@ -476,11 +527,13 @@ data:
         const entry = { name: c.name, text, ts: Date.now() };
         guestbook.push(entry); if (guestbook.length > 60) guestbook.shift();
         broadcast({ t: 'carved', entry }); scheduleSave();
+        completeChallenge(c, 'carve');
       } else if (m.t === 'emote') {
         const OK = ['💛', '💤', '🎵', '😂', '✨', '🌿'];
         if (OK.indexOf(m.e) < 0 || Date.now() - (c.lastEmote || 0) < 1500) return;
         c.lastEmote = Date.now();
         broadcast({ t: 'emote', id: c.id, e: m.e });
+        completeChallenge(c, 'emote');
       } else if (m.t === 'spectate') {
         c.spectator = true;                               // read-only meadow-cam: no sheep, not counted
         broadcastRoster();
@@ -488,12 +541,14 @@ data:
         if (!train || Date.now() - (c.lastPoke || 0) < 3000) return;
         c.lastPoke = Date.now();
         trainSay(`A visitor named ${c.name} just poked your cage. Snap back grumpily about how they should be working instead of relaxing, one line.`);
+        completeChallenge(c, 'poke');
       } else if (m.t === 'ask') {
         const q = String(m.q || '').replace(/[\x00-\x1f\x7f]/g, '').slice(0, 140).trim();
         const idx = bots.findIndex((b) => b.id === m.id);
         if (idx < 0 || !q || Date.now() - (c.lastAsk || 0) < 6000) return;   // per-visitor cooldown
         c.lastAsk = Date.now();
         if (c.token) { const p = profiles.get(c.token); if (p) p.memory = q.slice(0, 80); scheduleSave(); }   // execs remember what you asked
+        completeChallenge(c, 'ask');
         broadcast({ t: 'q', id: c.id, text: q });                            // show the question above the asker
         const e = EXECS[idx];
         walkExecTo(idx, c.id);
@@ -507,9 +562,9 @@ data:
 
     function broadcastRoster() {
       const r = {};
-      for (const c of clients.values()) { if (c.spectator) continue; r[c.id] = [c.name, c.hue, '', (c.color == null ? -1 : c.color), c.hat || '', c.points || 0, c.title || titleFor(c.points || 0)]; }
-      for (const b of bots) r[b.id] = [b.name, b.hue, b.role, -1, '', 0, ''];
-      if (train) r[train.id] = [train.name, 0, 'TRAIN', -1, '', 0, ''];
+      for (const c of clients.values()) { if (c.spectator) continue; r[c.id] = [c.name, c.hue, '', (c.color == null ? -1 : c.color), c.hat || '', c.points || 0, c.title || titleFor(c.points || 0), c.badges || 0]; }
+      for (const b of bots) r[b.id] = [b.name, b.hue, b.role, -1, '', 0, '', 0];
+      if (train) r[train.id] = [train.name, 0, 'TRAIN', -1, '', 0, '', 0];
       broadcast({ t: 'r', roster: r });
     }
     function sendGrass(c) { send(c, { t: 'g', grass: grassStr() }); }
@@ -569,6 +624,8 @@ data:
             c.state = 2;
           } else c.state = 0;                      // idle
         }
+        if (c.state === 3) { if (!c.napStart) c.napStart = now; else if (now - c.napStart > 5000) completeChallenge(c, 'nap'); }
+        else c.napStart = 0;
       }
 
       // exec sheep (VIPs) roam the meadow on their own, drawn to the campfire
