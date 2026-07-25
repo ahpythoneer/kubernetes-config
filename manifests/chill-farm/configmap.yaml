@@ -1561,6 +1561,7 @@ data:
           <a class="chip" href="/ranch/" style="text-decoration:none">🌙 The Ranch →</a>
           <button class="chip" id="custBtn" style="cursor:pointer" title="Customize your sheep">✎ your sheep</button>
           <button class="chip" id="bookBtn" style="cursor:pointer" title="The fence guestbook">📖 fence</button>
+          <button class="chip" id="voiceBtn" style="cursor:pointer" title="Let the sheep speak">🗣️ voice</button>
           <button class="chip" id="sndBtn" style="cursor:pointer" title="Ambient sound">🔈 sound</button>
           <span class="chip" id="wxChip">☀️ clear</span>
           <span class="chip">🐑 <b id="nSheep">–</b> chilling</span>
@@ -1742,6 +1743,7 @@ data:
           var bs = sheep[m.id]; if (bs) baas.push({ id:m.id, t: performance.now() });
         } else if (m.t === "say"){
           execBubbles[m.id] = { text: m.text, t: performance.now() };
+          speak(m.text, (roster[m.id] || {}).role === "TRAIN");
         } else if (m.t === "q"){
           qBubbles[m.id] = { text: m.text, t: performance.now() };
         } else if (m.t === "meeting"){
@@ -1771,9 +1773,11 @@ data:
         if (e.target && e.target.closest && e.target.closest(".askbar, .cpanel, .hud, .emotebar")) return;  // ignore UI taps
         setPointerFromEvent(e);
         var hit = execAtScreen(e);
-        if (hit != null) openAsk(hit); else baa();
+        if (hit != null){ if ((roster[hit] || {}).role === "TRAIN") pokeTrain(); else openAsk(hit); }
+        else baa();
       });
       function baa(){ if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"baa" })); }
+      function pokeTrain(){ if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"train" })); }
 
       // find an exec sheep near a tap/click (screen CSS pixels)
       function execAtScreen(e){
@@ -2083,6 +2087,7 @@ data:
         var s = sheep[id], info = roster[id] || { name:"", hue:0, color:-1, hat:"" };
         var x = toScreenX(s.rx), y = toScreenY(s.ry), u = view.s;   // u = world->screen unit
         var mine = (+id === myId);
+        var isTrain = info.role === "TRAIN";
         var asleep = s.state === 3, grazing = s.state === 2, walking = s.state === 1;
         var wob = walking && !reduce ? Math.sin(performance.now()/120 + id*1.3) * u*2 : 0;
 
@@ -2096,8 +2101,8 @@ data:
         ctx.moveTo(x-u*8, y+u*6); ctx.lineTo(x-u*8, y+u*12);
         ctx.moveTo(x+u*8, y+u*6); ctx.lineTo(x+u*8, y+u*12); ctx.stroke();
 
-        // fluffy body (cluster of circles) — fleece can be tinted a pastel colour
-        ctx.fillStyle = (info.color != null && info.color >= 0) ? "hsl("+info.color+",50%,90%)" : (mine ? "#fffdf5" : "#f3efe4");
+        // fluffy body (cluster of circles) — fleece can be tinted a pastel colour (The Train is black)
+        ctx.fillStyle = isTrain ? "#2b2b30" : (info.color != null && info.color >= 0) ? "hsl("+info.color+",50%,90%)" : (mine ? "#fffdf5" : "#f3efe4");
         var body = [[0,-2,17],[-11,-4,10],[11,-4,10],[-6,-12,10],[7,-12,10],[0,-16,9]];
         for (var i=0;i<body.length;i++){ ctx.beginPath(); ctx.arc(x+body[i][0]*u+wob, y+body[i][1]*u, body[i][2]*u, 0, 6.28); ctx.fill(); }
 
@@ -2127,6 +2132,8 @@ data:
           ctx.strokeStyle = "rgba(255,214,80,.9)"; ctx.lineWidth = u*2;
           ctx.beginPath(); ctx.arc(x, y-u*2, u*24, 0, 6.28); ctx.stroke();
           ctx.font = (u*20)+"px sans-serif"; ctx.textAlign="center"; ctx.fillText("🤠", hx, hy - u*10);
+        } else if (isTrain){
+          ctx.font = (u*18)+"px sans-serif"; ctx.textAlign="center"; ctx.fillText("😠", hx, hy - u*10);
         } else if (info.role && HATS[info.role]){
           ctx.font = (u*20)+"px sans-serif"; ctx.textAlign="center"; ctx.fillText(HATS[info.role], hx, hy - u*10);
         } else if (info.hat){
@@ -2136,11 +2143,21 @@ data:
         // name label (execs get a gold "Name · ROLE" plate)
         if (info.name){
           ctx.textAlign = "center";
-          var label = info.role ? (info.name + " · " + info.role) : info.name;
+          var label = (info.role && !isTrain) ? (info.name + " · " + info.role) : info.name;
           ctx.font = "700 "+(u*11)+"px 'Courier New',monospace";
           ctx.fillStyle = "rgba(20,30,12,.55)"; ctx.fillText(label, x+1, y-u*26+1);
-          ctx.fillStyle = mine ? "#fff" : (info.role ? "#ffd86b" : "hsl("+info.hue+",70%,88%)");
+          ctx.fillStyle = mine ? "#fff" : isTrain ? "#e07a6a" : (info.role ? "#ffd86b" : "hsl("+info.hue+",70%,88%)");
           ctx.fillText(label, x, y-u*27);
+        }
+
+        // The Train's cage (drawn in front)
+        if (isTrain){
+          ctx.strokeStyle = "#7a7a86"; ctx.lineWidth = u*2.4; ctx.lineCap = "round";
+          var cw = u*52, chh = u*60, cyy = y - u*8;
+          for (var bar=-2; bar<=2; bar++){ ctx.beginPath(); ctx.moveTo(x + bar*cw/4, cyy - chh/2); ctx.lineTo(x + bar*cw/4, cyy + chh/2); ctx.stroke(); }
+          ctx.beginPath(); ctx.moveTo(x-cw/2, cyy-chh/2); ctx.lineTo(x+cw/2, cyy-chh/2);
+          ctx.moveTo(x-cw/2, cyy+chh/2); ctx.lineTo(x+cw/2, cyy+chh/2); ctx.stroke();
+          ctx.lineCap = "butt";
         }
       }
       requestAnimationFrame(render);
@@ -2272,6 +2289,26 @@ data:
           var d=Math.hypot(a.rx-b.rx, a.ry-b.ry);
           if (d<38 && Math.random()<0.12){ nuzzles.push({ x:(a.rx+b.rx)/2, y:(a.ry+b.ry)/2, t:performance.now() }); } }
       }, 1600);
+
+      // ---------- voice: let the sheep speak (browser TTS, opt-in) ----------
+      var voiceOn = false, ttsVoice = null;
+      function pickVoice(){ if (!window.speechSynthesis) return; var vs = speechSynthesis.getVoices();
+        for (var i=0;i<vs.length;i++){ if (/en[-_]/i.test(vs[i].lang)){ ttsVoice = vs[i]; break; } } }
+      if (window.speechSynthesis){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+      function speak(text, grumpy){
+        if (!voiceOn || !window.speechSynthesis) return;
+        try {
+          var u = new SpeechSynthesisUtterance(text);
+          if (ttsVoice) u.voice = ttsVoice;
+          u.rate = grumpy ? 1.16 : 0.98; u.pitch = grumpy ? 0.6 : 1.0; u.volume = 0.95;
+          speechSynthesis.cancel(); speechSynthesis.speak(u);
+        } catch(e){}
+      }
+      var voiceBtn = document.getElementById("voiceBtn");
+      voiceBtn.addEventListener("click", function(){
+        voiceOn = !voiceOn; voiceBtn.textContent = voiceOn ? "🗣️ voice on" : "🗣️ voice";
+        if (voiceOn && window.speechSynthesis){ try { var w = new SpeechSynthesisUtterance("chill"); w.volume = 0; speechSynthesis.speak(w); } catch(e){} }
+      });
     })();
     </script>
   ranch.html: |
@@ -2400,6 +2437,7 @@ data:
       <nav>
         <a href="/pasture/">Pasture</a>
         <a href="/">Home</a>
+        <button id="voiceBtn" class="count" style="cursor:pointer;font-family:var(--mono);font-size:.76rem">🗣️ voice</button>
         <button id="sndBtn" class="count" style="cursor:pointer;font-family:var(--mono);font-size:.76rem">🔈 sound</button>
         <span class="count">🛖 <b id="count">–</b> loungin'</span>
       </nav>
@@ -2510,7 +2548,7 @@ data:
         if (m.t==="welcome"){ myId=m.id; }
         else if (m.t==="hist"){ logEl.innerHTML=""; for (var i=0;i<m.msgs.length;i++){ var x=m.msgs[i]; addLine(x.name,x.hue,x.text,false); } }
         else if (m.t==="r"){ lastGuests=m.guests; curGuests={}; for (var j=0;j<m.guests.length;j++) curGuests[m.guests[j].id]=m.guests[j]; reconcile(m.guests); countEl.textContent=m.n; }
-        else if (m.t==="chat"){ addLine(m.m.name, m.m.hue, m.m.text, false); bubble(m.m.id, m.m.text); }
+        else if (m.t==="chat"){ addLine(m.m.name, m.m.hue, m.m.text, false); bubble(m.m.id, m.m.text); if (m.m.id>=2000000) speakR(m.m.text); }
       }
       connect();
 
@@ -2523,6 +2561,15 @@ data:
       msgIn.addEventListener("keydown", function(e){ if (e.key==="Enter"){ e.preventDefault(); sendChat(); } });
       var orderBtn = document.getElementById("orderBtn");
       orderBtn.addEventListener("click", function(){ if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"order" })); });
+
+      // voice: Sam & visiting execs speak (opt-in)
+      var voiceOn = false, ttsVoice = null;
+      function pickVoice(){ if (!window.speechSynthesis) return; var vs = speechSynthesis.getVoices(); for (var i=0;i<vs.length;i++){ if (/en[-_]/i.test(vs[i].lang)){ ttsVoice = vs[i]; break; } } }
+      if (window.speechSynthesis){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+      function speakR(text){ if (!voiceOn || !window.speechSynthesis) return; try { var u=new SpeechSynthesisUtterance(text); if (ttsVoice) u.voice=ttsVoice; u.rate=0.98; u.pitch=1.0; u.volume=0.95; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch(e){} }
+      var voiceBtn = document.getElementById("voiceBtn");
+      voiceBtn.addEventListener("click", function(){ voiceOn = !voiceOn; voiceBtn.textContent = voiceOn ? "🗣️ voice on" : "🗣️ voice";
+        if (voiceOn && window.speechSynthesis){ try { var w=new SpeechSynthesisUtterance("chill"); w.volume=0; speechSynthesis.speak(w); } catch(e){} } });
       function setName(){
         var n = nameIn.value.trim(); if (!n) return;
         try { localStorage.setItem("chill-name", n); } catch(e){}
