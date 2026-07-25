@@ -122,6 +122,19 @@ data:
       .navlinks { display: flex; gap: 1.4rem; align-items: center; font-size: .82rem; letter-spacing: .12em; text-transform: uppercase; }
       .navlinks a { text-decoration: none; opacity: .8; transition: opacity .3s; }
       .navlinks a:hover { opacity: 1; }
+      .dropdown { position: relative; display: inline-flex; }
+      .dd-toggle { font: inherit; font-family: var(--body); font-size: .82rem; letter-spacing: .12em; text-transform: uppercase;
+        color: inherit; background: none; border: none; cursor: pointer; opacity: .8; padding: 0; }
+      .dd-toggle:hover { opacity: 1; }
+      .dd-menu { position: absolute; top: calc(100% + .7rem); left: 50%; transform: translateX(-50%) translateY(-6px);
+        min-width: 168px; background: var(--card); border: 2px solid var(--line); border-radius: 12px; padding: .4rem;
+        box-shadow: 0 14px 32px rgba(0,0,0,.28); display: flex; flex-direction: column; gap: .2rem;
+        opacity: 0; visibility: hidden; transition: opacity .25s var(--ease-chill), transform .25s var(--ease-chill), visibility .25s; z-index: 50; }
+      .dd-menu::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: .8rem; }  /* hover bridge */
+      .dropdown:hover .dd-menu, .dropdown.open .dd-menu { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+      .dd-menu a { text-decoration: none; text-transform: none; letter-spacing: 0; font-size: .92rem; color: var(--ink);
+        opacity: 1; padding: .5rem .7rem; border-radius: 8px; white-space: nowrap; }
+      .dd-menu a:hover { background: color-mix(in srgb, var(--wheat) 30%, transparent); opacity: 1; }
       .theme-toggle {
         border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent);
         background: transparent; color: inherit; cursor: pointer;
@@ -412,8 +425,13 @@ data:
         <a href="#backlog">The Backlog</a>
         <a href="#values">How We Chill</a>
         <a href="/careers/">Careers</a>
-        <a href="/pasture/">Pasture 🐑</a>
-        <a href="/ranch/">Ranch 🌙</a>
+        <div class="dropdown">
+          <button type="button" class="dd-toggle" aria-haspopup="true" aria-expanded="false">Chill Zone ▾</button>
+          <div class="dd-menu">
+            <a href="/pasture/">🐑 The Pasture</a>
+            <a href="/ranch/">🌙 The Ranch</a>
+          </div>
+        </div>
         <a href="#hire" class="hire-link">We're Hiring</a>
         <button class="theme-toggle" id="themeBtn" aria-label="Change the time of day" title="Sunrise / Sunset">🌤️</button>
       </nav>
@@ -959,6 +977,14 @@ data:
     (function(){
       if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(function(){});
 
+      // Chill Zone dropdown (click/tap toggle; hover works via CSS)
+      document.querySelectorAll(".dropdown").forEach(function(dd){
+        var btn = dd.querySelector(".dd-toggle");
+        btn.addEventListener("click", function(e){ e.stopPropagation(); var open = dd.classList.toggle("open"); btn.setAttribute("aria-expanded", open ? "true" : "false"); });
+      });
+      document.addEventListener("click", function(){ document.querySelectorAll(".dropdown.open").forEach(function(dd){ dd.classList.remove("open"); dd.querySelector(".dd-toggle").setAttribute("aria-expanded", "false"); }); });
+      document.addEventListener("keydown", function(e){ if (e.key === "Escape") document.querySelectorAll(".dropdown.open").forEach(function(dd){ dd.classList.remove("open"); }); });
+
       var fcEl = document.getElementById("fcText");
       function loadForecast(){ fetch("/ws/forecast", { cache:"no-store" }).then(function(r){ return r.json(); }).then(function(d){ if (d && d.text) fcEl.textContent = d.text; }).catch(function(){}); }
       loadForecast(); setInterval(loadForecast, 600000);
@@ -1058,6 +1084,19 @@ data:
       .navlinks { display:flex; gap:1.4rem; align-items:center; font-size:.82rem; letter-spacing:.12em; text-transform:uppercase; }
       .navlinks a { text-decoration:none; opacity:.8; transition:opacity .3s; }
       .navlinks a:hover { opacity:1; }
+      .dropdown { position:relative; display:inline-flex; }
+      .dd-toggle { font:inherit; font-family:var(--body); font-size:.82rem; letter-spacing:.12em; text-transform:uppercase;
+        color:inherit; background:none; border:none; cursor:pointer; opacity:.8; padding:0; }
+      .dd-toggle:hover { opacity:1; }
+      .dd-menu { position:absolute; top:calc(100% + .7rem); left:50%; transform:translateX(-50%) translateY(-6px);
+        min-width:170px; background:var(--card); border:2px solid var(--line); border-radius:12px; padding:.4rem;
+        box-shadow:0 14px 32px rgba(0,0,0,.3); display:flex; flex-direction:column; gap:.2rem;
+        opacity:0; visibility:hidden; transition:opacity .25s var(--ease-chill), transform .25s var(--ease-chill), visibility .25s; z-index:50; }
+      .dd-menu::before { content:""; position:absolute; left:0; right:0; bottom:100%; height:.8rem; }
+      .dropdown:hover .dd-menu, .dropdown.open .dd-menu { opacity:1; visibility:visible; transform:translateX(-50%) translateY(0); }
+      .dd-menu a { text-decoration:none; text-transform:none; letter-spacing:0; font-family:var(--body); font-size:.92rem;
+        color:var(--ink); opacity:1; padding:.5rem .7rem; border-radius:8px; white-space:nowrap; }
+      .dd-menu a:hover { background:color-mix(in srgb, var(--wheat) 30%, transparent); opacity:1; }
       .theme-toggle { border:1px solid color-mix(in srgb, var(--ink) 25%, transparent); background:transparent; color:inherit;
         cursor:pointer; width:40px; height:40px; border-radius:50%; font-size:1.1rem; display:grid; place-items:center;
         transition:transform .5s var(--ease-chill), background .3s; }
@@ -1165,8 +1204,13 @@ data:
         <a href="/" class="home-link">Home</a>
         <a href="/#crew">The Crew</a>
         <a href="/#values">How We Chill</a>
-        <a href="/pasture/">Pasture 🐑</a>
-        <a href="/ranch/">Ranch 🌙</a>
+        <div class="dropdown">
+          <button type="button" class="dd-toggle" aria-haspopup="true" aria-expanded="false">Chill Zone ▾</button>
+          <div class="dd-menu">
+            <a href="/pasture/">🐑 The Pasture</a>
+            <a href="/ranch/">🌙 The Ranch</a>
+          </div>
+        </div>
         <button class="theme-toggle" id="themeBtn" aria-label="Change the time of day" title="Sunrise / Sunset">🌤️</button>
       </nav>
     </header>
@@ -1352,6 +1396,14 @@ data:
         }).catch(function(){});
       }
       pollPresence(); setInterval(pollPresence, 5000);
+
+      // Chill Zone dropdown
+      document.querySelectorAll(".dropdown").forEach(function(dd){
+        var btn = dd.querySelector(".dd-toggle");
+        btn.addEventListener("click", function(e){ e.stopPropagation(); var open = dd.classList.toggle("open"); btn.setAttribute("aria-expanded", open ? "true" : "false"); });
+      });
+      document.addEventListener("click", function(){ document.querySelectorAll(".dropdown.open").forEach(function(dd){ dd.classList.remove("open"); dd.querySelector(".dd-toggle").setAttribute("aria-expanded","false"); }); });
+      document.addEventListener("keydown", function(e){ if (e.key === "Escape") document.querySelectorAll(".dropdown.open").forEach(function(dd){ dd.classList.remove("open"); }); });
 
       var io = new IntersectionObserver(function(entries){
         entries.forEach(function(e){ if (e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target); } });
