@@ -147,6 +147,21 @@ data:
       }).catch(() => { challengeGen = false; });
     }
     function getChallenge() { if (challenge.date !== todayStr()) genChallenge(); return challenge; }
+
+    // The Daily Chill — a tiny AI newspaper, refreshed once a day
+    let news = { date: '', items: [] };
+    let newsGen = false;
+    function genNews() {
+      if (newsGen || !AI_ON) return; newsGen = true;
+      const sys = 'You are the editor of The Chill Farm Gazette, a tiny newspaper for a ranch where everyone relaxes instead of working. Write exactly 5 short, silly, cozy headlines about ranch life (napping, sheep, sunsets, lemonade, hammocks, the grumpy caged workaholic sheep called The Train). Keep them wholesome and gentle — never dark, violent, or morbid. One headline per line. No numbering, no quotes, no emojis. Each under 10 words.';
+      askLLM(sys, "Today's headlines, one per line.", 600, 220, true).then((raw) => {
+        newsGen = false;
+        if (!raw) return;
+        const items = raw.split('\n').map((s) => s.replace(/^[-*\d.\s]+/, '').trim()).filter(Boolean).slice(0, 5);
+        if (items.length) { news = { date: todayStr(), items }; scheduleSave(); }
+      }).catch(() => { newsGen = false; });
+    }
+    function getNews() { if (news.date !== todayStr()) genNews(); return news; }
     function completeChallenge(c, type) {
       if (!c.token || !challenge.date || challenge.type !== type) return;
       const p = profiles.get(c.token); if (!p || p.challengeDone === challenge.date) return;
@@ -169,6 +184,7 @@ data:
         if (Array.isArray(j.guestbook)) guestbook = j.guestbook.slice(-60);
         if (j.forecast) forecast = j.forecast;
         if (j.challenge) challenge = j.challenge;
+        if (j.news) news = j.news;
         console.log('loaded state: ' + profiles.size + ' profiles, ' + guestbook.length + ' carvings');
       } catch (e) { console.log('no saved state (' + (e.code || e.message) + ') — starting fresh'); }
     })();
@@ -176,7 +192,7 @@ data:
     function scheduleSave() { if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; doSave(); }, 3000); }
     function doSave() {
       try {
-        const obj = { profiles: {}, guestbook, forecast, challenge };
+        const obj = { profiles: {}, guestbook, forecast, challenge, news };
         for (const [k, v] of profiles) obj.profiles[k] = v;
         fs.writeFileSync(DATA_FILE, JSON.stringify(obj));
       } catch (e) { /* read-only / missing volume: degrade to in-memory */ }
@@ -228,7 +244,7 @@ data:
         : ' It is bright and sunny, so sound extra cheery and warm.';
     }
 
-    async function askLLM(sys, user, maxLen, numPredict) {
+    async function askLLM(sys, user, maxLen, numPredict, keepLines) {
       if (!AI_ON || aiInFlight >= 2 || typeof fetch !== 'function' || !aiRateOk()) return null;
       aiInFlight++;
       const ctl = new AbortController();
@@ -240,7 +256,8 @@ data:
         });
         if (!res.ok) return null;
         const j = await res.json();
-        let t = (j.response || '').replace(/["]/g, '').trim().replace(/^['\s]+|['\s]+$/g, '').split('\n')[0].trim();
+        let t = (j.response || '').replace(/["]/g, '').trim();
+        if (!keepLines) t = t.replace(/^['\s]+|['\s]+$/g, '').split('\n')[0].trim();
         const cap = maxLen || 140;
         if (t.length > cap) t = t.slice(0, cap - 2) + '…';
         return t || null;
@@ -274,6 +291,7 @@ data:
     }
     setTimeout(getForecast, 6000);                        // warm today's chill forecast shortly after boot
     setTimeout(getChallenge, 7000);                       // warm today's challenge too
+    setTimeout(getNews, 8500);                            // warm today's Gazette headlines
 
     // ---- the execs occasionally hold a (useless) board meeting at the campfire ----
     const MEETING_TOPICS = ['Q3 Nap Strategy', 'Should we hire a cloud?', 'Optimizing the sunset', 'Hammock Capacity Planning', 'The Lemonade Roadmap', 'Whether Tuesdays are necessary', 'Migrating to a slower pace', 'The Great Snack Audit'];
@@ -364,6 +382,12 @@ data:
         const text = getForecast();
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
         res.end(JSON.stringify({ text, date: forecast.date }));
+        return;
+      }
+      if (url.endsWith('/news')) {
+        const n = getNews();
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
+        res.end(JSON.stringify({ items: n.items, date: n.date }));
         return;
       }
       if (url.endsWith('/leaderboard')) {
