@@ -133,3 +133,7 @@ resources:
   - manifests/chill-farm/ranch-src.yaml
   - manifests/chill-farm/ranch-deployment.yaml
   - manifests/chill-farm/ranch-service.yaml
+  # Chill Farm — "/pond" lazy fishing zone (dependency-free node WS server)
+  - manifests/chill-farm/pond-src.yaml
+  - manifests/chill-farm/pond-deployment.yaml
+  - manifests/chill-farm/pond-service.yaml

@@ -1,0 +1,210 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chill-pond-src
+  namespace: chill-farm
+  labels:
+    app: chill-pond
+data:
+  server.js: |
+    'use strict';
+    /* ============================================================
+       Chill Farm — "/pond" lazy fishing lounge (chat-free, meditative)
+       Dependency-free WebSocket server. Everyone gets a spot on the
+       bank; cast a line, wait, and (mostly) catch a chill nothing.
+       ============================================================ */
+    const http = require('http');
+    const crypto = require('crypto');
+
+    const PORT = process.env.PORT || 8080;
+    const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+    const LOGMAX = 30;
+    const SPOTS = 14;                      // spots around the bank
+
+    const ADJ = ['Mellow', 'Breezy', 'Cozy', 'Sunny', 'Patient', 'Dozy', 'Calm', 'Serene', 'Lazy', 'Still', 'Drowsy', 'Idle'];
+    const NOUN = ['Angler', 'Caster', 'Drifter', 'Dreamer', 'Waders', 'Bobber', 'Skipper', 'Gazer', 'Lounger', 'Reeler'];
+    const CATCHES = [
+      'a moment of peace', 'an old boot — a classic', 'nothing at all — a personal best', 'a rubber duck',
+      'the reflection of a passing cloud', 'a genuinely good nap idea', 'a lily pad', 'your reflection, looking well-rested',
+      "a message in a bottle that just says 'relax'", 'a fish who also wanted to chill (released)', 'time itself — you let it go',
+      'a soggy old to-do list (discarded)', 'a smooth skipping stone', 'the sound of a distant frog', 'absolutely nothing, beautifully',
+      'one good long exhale', 'a single perfect ripple', 'a sunbeam', 'nothing, and it was plenty',
+    ];
+
+    // ---- AI catches (occasional, via DGX Spark Ollama) ----
+    const OLLAMA_URL = process.env.OLLAMA_URL || 'http://10.0.129.94:11434';
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
+    const AI_ON = !process.env.AI_OFF;
+    let aiInFlight = 0, aiCalls = [];
+    function aiRateOk() { const now = Date.now(); aiCalls = aiCalls.filter((t) => now - t < 60000); if (aiCalls.length >= 8) return false; aiCalls.push(now); return true; }
+    async function aiCatch() {
+      if (!AI_ON || aiInFlight >= 2 || typeof fetch !== 'function' || !aiRateOk()) return null;
+      aiInFlight++;
+      const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 12000);
+      try {
+        const res = await fetch(OLLAMA_URL + '/api/generate', {
+          method: 'POST', signal: ctl.signal, headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ model: OLLAMA_MODEL, system: "You run the chill pond at Chill Farm, where lazy anglers fish to catch NOTHING and relax. Name one whimsical, cozy, absurd thing someone just 'caught'. Under 10 words. Lowercase, no quotes, no preamble, no emojis.", prompt: 'What did they catch?', stream: false, keep_alive: '30m', options: { num_predict: 30, temperature: 1.1 } }),
+        });
+        if (!res.ok) return null;
+        const j = await res.json();
+        let t = (j.response || '').replace(/["]/g, '').trim().replace(/^[-'\s]+|['\s.]+$/g, '').split('\n')[0].trim();
+        if (t.length > 70) t = t.slice(0, 68) + '…';
+        return t || null;
+      } catch (e) { return null; } finally { clearTimeout(to); aiInFlight--; }
+    }
+
+    const clients = new Map();
+    const byToken = new Map();
+    const usedSlots = new Set();
+    let catchLog = [];
+    let nextId = 1;
+
+    function clean(s, max) { return String(s == null ? '' : s).replace(/[\x00-\x1f\x7f]/g, '').slice(0, max).trim(); }
+    function freeSlot() { let s = 0; while (usedSlots.has(s)) s++; usedSlots.add(s); return s; }
+
+    function encode(str) {
+      const p = Buffer.from(str); const n = p.length; let head;
+      if (n < 126) head = Buffer.from([0x81, n]);
+      else if (n < 65536) { head = Buffer.alloc(4); head[0] = 0x81; head[1] = 126; head.writeUInt16BE(n, 2); }
+      else { head = Buffer.alloc(10); head[0] = 0x81; head[1] = 127; head.writeBigUInt64BE(BigInt(n), 2); }
+      return Buffer.concat([head, p]);
+    }
+    function sendRaw(c, buf) { try { c.sock.write(buf); } catch (e) { drop(c); } }
+    function send(c, obj) { sendRaw(c, encode(JSON.stringify(obj))); }
+    function broadcast(obj) { const b = encode(JSON.stringify(obj)); for (const c of clients.values()) sendRaw(c, b); }
+    const PING = Buffer.from([0x89, 0]);
+    function closeFrame(code) { const b = Buffer.alloc(4); b[0] = 0x88; b[1] = 2; b.writeUInt16BE(code, 2); return b; }
+
+    const server = http.createServer((req, res) => {
+      const url = req.url || '/';
+      if (url.endsWith('/healthz')) { res.writeHead(200); res.end('ok'); return; }
+      if (url.endsWith('/stats')) {
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
+        res.end(JSON.stringify({ anglers: clients.size }));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('chill pond :: ' + clients.size + ' anglers');
+    });
+
+    server.on('upgrade', (req, sock) => {
+      const key = req.headers['sec-websocket-key'];
+      if (!key) { sock.destroy(); return; }
+      const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
+      sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
+      onConnect(sock);
+    });
+
+    function onConnect(sock) {
+      const id = nextId++;
+      const c = {
+        id, sock, buf: Buffer.alloc(0),
+        name: ADJ[(Math.random() * ADJ.length) | 0] + ' ' + NOUN[(Math.random() * NOUN.length) | 0],
+        hue: (id * 47) % 360, slot: freeSlot(), casting: false, bx: 0, by: 0,
+        lastSeen: Date.now(), token: null, alive: true, biteTimer: null,
+      };
+      clients.set(id, c);
+      sock.setNoDelay(true);
+      sock.on('data', (chunk) => onData(c, chunk));
+      sock.on('close', () => drop(c));
+      sock.on('error', () => drop(c));
+      send(c, { t: 'welcome', id });
+      send(c, { t: 'log', entries: catchLog });
+      broadcastRoster();
+    }
+
+    function drop(c) {
+      if (!c.alive) return;
+      c.alive = false;
+      clearTimeout(c.biteTimer);
+      clients.delete(c.id);
+      usedSlots.delete(c.slot);
+      if (c.token && byToken.get(c.token) === c.id) byToken.delete(c.token);
+      try { c.sock.destroy(); } catch (e) {}
+      broadcastRoster();
+    }
+
+    function onData(c, chunk) {
+      c.lastSeen = Date.now();
+      c.buf = Buffer.concat([c.buf, chunk]);
+      while (true) {
+        const b = c.buf; if (b.length < 2) return;
+        const opcode = b[0] & 0x0f, masked = b[1] & 0x80;
+        let len = b[1] & 0x7f, off = 2;
+        if (len === 126) { if (b.length < 4) return; len = b.readUInt16BE(2); off = 4; }
+        else if (len === 127) { if (b.length < 10) return; len = Number(b.readBigUInt64BE(2)); off = 10; }
+        if (len > 1_000_000) { drop(c); return; }
+        let mask; if (masked) { if (b.length < off + 4) return; mask = b.slice(off, off + 4); off += 4; }
+        if (b.length < off + len) return;
+        let pay = b.slice(off, off + len);
+        if (masked) { const o = Buffer.alloc(len); for (let i = 0; i < len; i++) o[i] = pay[i] ^ mask[i & 3]; pay = o; }
+        c.buf = b.slice(off + len);
+        if (opcode === 0x8) { drop(c); return; }
+        else if (opcode === 0x9) { sendRaw(c, Buffer.concat([Buffer.from([0x8a, pay.length & 0x7f]), pay])); }
+        else if (opcode === 0x1) { onMessage(c, pay.toString()); }
+      }
+    }
+
+    function onMessage(c, str) {
+      let m; try { m = JSON.parse(str); } catch (e) { return; }
+      if (m.t === 'hello') {
+        if (typeof m.token === 'string' && m.token.length <= 64) {
+          const prev = byToken.get(m.token);
+          if (prev && prev !== c.id && clients.has(prev)) { const old = clients.get(prev); try { old.sock.write(closeFrame(4001)); } catch (e) {} drop(old); }
+          c.token = m.token; byToken.set(m.token, c.id);
+        }
+        const nm = clean(m.name, 18); if (nm) c.name = nm;
+        broadcastRoster();
+      } else if (m.t === 'name') {
+        const nm = clean(m.name, 18); if (nm) { c.name = nm; broadcastRoster(); }
+      } else if (m.t === 'cast') {
+        if (c.casting) return;
+        c.casting = true;
+        // bobber lands in the water, toward the pond centre from this angler's spot
+        const a = (c.slot % SPOTS) / SPOTS * Math.PI * 2 - Math.PI / 2;
+        c.bx = Math.round(500 + Math.cos(a) * 400 * (0.32 + Math.random() * 0.26));
+        c.by = Math.round(300 + Math.sin(a) * 210 * (0.32 + Math.random() * 0.26));
+        broadcastRoster();
+        clearTimeout(c.biteTimer);
+        c.biteTimer = setTimeout(() => resolveCatch(c), 8000 + Math.random() * 15000);  // a chill wait
+      } else if (m.t === 'reel') {
+        if (!c.casting) return;
+        clearTimeout(c.biteTimer); c.casting = false;
+        broadcastRoster();
+      }
+    }
+
+    function resolveCatch(c) {
+      if (!c.alive || !c.casting) return;
+      c.casting = false;
+      const finish = (text) => {
+        if (!c.alive) return;
+        const entry = { name: c.name, catch: text, ts: Date.now() };
+        catchLog.push(entry); if (catchLog.length > LOGMAX) catchLog.shift();
+        broadcast({ t: 'catch', id: c.id, name: c.name, catch: text });
+        broadcastRoster();
+      };
+      if (Math.random() < 0.3) {
+        aiCatch().then((line) => finish(line || CATCHES[(Math.random() * CATCHES.length) | 0]));
+      } else {
+        finish(CATCHES[(Math.random() * CATCHES.length) | 0]);
+      }
+    }
+
+    function broadcastRoster() {
+      const anglers = [];
+      for (const c of clients.values()) anglers.push({ id: c.id, name: c.name, hue: c.hue, slot: c.slot, casting: c.casting, bx: c.bx, by: c.by });
+      broadcast({ t: 'r', anglers, n: clients.size });
+    }
+
+    setInterval(() => {
+      const now = Date.now();
+      for (const c of clients.values()) { if (now - c.lastSeen > 32000) { drop(c); continue; } sendRaw(c, PING); }
+    }, 12000);
+
+    if (AI_ON && typeof fetch === 'function') {
+      fetch(OLLAMA_URL + '/api/generate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: OLLAMA_MODEL, prompt: 'hi', stream: false, keep_alive: '30m', options: { num_predict: 1 } }) }).then(() => console.log('ollama warm')).catch(() => console.log('ollama warm failed'));
+    }
+
+    server.listen(PORT, () => console.log('chill pond listening on :' + PORT));

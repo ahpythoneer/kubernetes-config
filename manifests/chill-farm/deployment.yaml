@@ -16,7 +16,7 @@ spec:
         app: chill-farm
       annotations:
         # bump this to force a rollout when the site content changes
-        chill-farm/content-rev: "18"
+        chill-farm/content-rev: "19"
     spec:
       containers:
       - name: nginx
@@ -69,6 +69,8 @@ spec:
             path: pasture/index.html
           - key: ranch.html
             path: ranch/index.html
+          - key: pond.html
+            path: pond/index.html
           - key: manifest.json
             path: manifest.json
           - key: sw.js
