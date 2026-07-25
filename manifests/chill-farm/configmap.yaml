@@ -259,6 +259,17 @@ data:
       .forecast h3 { font-size: 1.3rem; text-transform: uppercase; margin: .4rem 0 .5rem; }
       .forecast p { color: var(--ink-soft); font-size: 1.02rem; line-height: 1.5; margin: 0; }
 
+      /* Hall of Chill leaderboard */
+      .hall { list-style: none; counter-reset: h; margin: 2.2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .6rem; max-width: 640px; }
+      .hall li { counter-increment: h; display: flex; align-items: center; gap: 1rem; background: var(--card); border: 2px solid var(--line);
+        border-radius: 12px; padding: .8rem 1.1rem; box-shadow: 0 8px 20px var(--shadow); }
+      .hall li::before { content: counter(h); font-family: var(--display); font-size: 1.3rem; color: var(--wheat-deep); min-width: 1.6rem; text-align: center; }
+      .hall li:first-child { border-color: var(--wheat); }
+      .hall .nm { font-family: var(--display); font-size: 1.05rem; text-transform: uppercase; letter-spacing: .02em; }
+      .hall .ti { font-family: var(--mono); font-size: .72rem; color: var(--ink-soft); }
+      .hall .pts { margin-left: auto; font-family: var(--mono); color: var(--wheat-deep); white-space: nowrap; }
+      .hall-empty { justify-content: center; color: var(--ink-soft); }
+
       /* tumbleweeds roll across everything, slowly (it's chill) */
       .tumble { position: fixed; bottom: 4vh; left: -8vw; z-index: 30; font-size: 2rem; pointer-events: none; animation: roll linear forwards; filter: drop-shadow(0 4px 3px rgba(0,0,0,.2)); }
       @keyframes roll { from { transform: translateX(0) rotate(0);} to { transform: translateX(120vw) rotate(1800deg);} }
@@ -502,6 +513,18 @@ data:
               <p id="fcText">Reading the clouds…</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- ===================== HALL OF CHILL ===================== -->
+      <section class="band" id="hall">
+        <div class="wrap">
+          <div class="reveal">
+            <span class="eyebrow">The Hall of Chill</span>
+            <h2 class="title">Chillest of the Chill</h2>
+            <p class="lead">Ranked not by hustle but by hours grazed — the most relaxed sheep in the meadow. Earn your spot at <a href="/pasture/" style="color:var(--terra)">The Pasture</a>.</p>
+          </div>
+          <ol class="hall reveal" id="hallList"><li class="hall-empty">Loading the leaderboard…</li></ol>
         </div>
       </section>
 
@@ -988,6 +1011,24 @@ data:
       var fcEl = document.getElementById("fcText");
       function loadForecast(){ fetch("/ws/forecast", { cache:"no-store" }).then(function(r){ return r.json(); }).then(function(d){ if (d && d.text) fcEl.textContent = d.text; }).catch(function(){}); }
       loadForecast(); setInterval(loadForecast, 600000);
+
+      function loadHall(){
+        fetch("/ws/leaderboard", { cache:"no-store" }).then(function(r){ return r.json(); }).then(function(list){
+          var el = document.getElementById("hallList"); if (!el) return;
+          if (!list.length){ el.innerHTML = '<li class="hall-empty">No chillers ranked yet — be the first!</li>'; return; }
+          el.innerHTML = "";
+          list.forEach(function(p){
+            var li = document.createElement("li");
+            var info = document.createElement("div");
+            var nm = document.createElement("div"); nm.className = "nm"; nm.textContent = p.name; info.appendChild(nm);
+            var ti = document.createElement("div"); ti.className = "ti"; ti.textContent = p.title + (p.badges ? (" · 🏅 " + p.badges) : ""); info.appendChild(ti);
+            li.appendChild(info);
+            var pts = document.createElement("span"); pts.className = "pts"; pts.textContent = "🌿 " + p.points; li.appendChild(pts);
+            el.appendChild(li);
+          });
+        }).catch(function(){});
+      }
+      loadHall(); setInterval(loadHall, 30000);
 
       var cv = document.getElementById("camCanvas"), ctx = cv.getContext("2d");
       var camSheep = [], camMt = 13, camWS = null, camRetry = 0;
@@ -1550,6 +1591,13 @@ data:
       .emotebar button{width:34px;height:34px;border:none;border-radius:50%;background:rgba(255,255,255,.08);cursor:pointer;font-size:1.05rem;line-height:1;padding:0;}
       .emotebar button:hover{background:rgba(217,164,65,.3);}
       @media (max-width:520px){ .emotebar button{width:30px;height:30px;font-size:.95rem;} }
+      .ptoast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%) translateY(160%);z-index:12;
+        background:var(--saddle-dk);color:#ffe6ad;border:2px solid var(--wheat);border-radius:30px;padding:.6rem 1.2rem;
+        font-family:var(--mono);font-size:.82rem;letter-spacing:.03em;box-shadow:0 12px 30px rgba(0,0,0,.5);
+        opacity:0;visibility:hidden;transition:transform .5s var(--ease),opacity .4s,visibility .5s;max-width:92vw;text-align:center;}
+      .ptoast.show{transform:translateX(-50%) translateY(0);opacity:1;visibility:visible;}
+      .chbox{background:rgba(217,164,65,.14);border:1px solid var(--wheat);border-radius:10px;padding:.5rem .7rem;margin-bottom:.6rem;font-size:.78rem;color:#ffe6ad;line-height:1.4;}
+      .chbox b{color:#fff;} .chbox .ok{color:#8bd06a;font-weight:700;}
     </style>
 
     <canvas id="c"></canvas>
@@ -1566,7 +1614,7 @@ data:
           <span class="chip" id="wxChip">☀️ clear</span>
           <span class="chip">🐑 <b id="nSheep">–</b> chilling</span>
           <span class="chip">🌿 grazed <b id="nGraze">0</b></span>
-          <span class="chip">you're <b id="youName">…</b> · 🌿<b id="chillPts">0</b> · <span id="youTitle" style="color:#ffd86b"></span></span>
+          <span class="chip">you're <b id="youName">…</b> · 🌿<b id="chillPts">0</b> · 🏅<b id="badges">0</b> · <span id="youTitle" style="color:#ffd86b"></span></span>
         </div>
         <div class="meter" title="Meadow Chill"><i id="chillBar"></i></div>
       </div>
@@ -1588,10 +1636,13 @@ data:
 
     <div class="cpanel bookpanel" id="bookpanel" hidden>
       <h4>📖 The Fence</h4>
+      <div class="chbox" id="challengeBox"></div>
       <div class="booklist" id="booklist"></div>
       <input id="carveIn" maxlength="100" placeholder="carve a note…" autocomplete="off" />
       <button class="done" id="carveBtn">carve it</button>
     </div>
+
+    <div class="ptoast" id="ptoast"></div>
 
     <div class="emotebar" id="emotebar">
       <button type="button" data-e="💛">💛</button><button type="button" data-e="💤">💤</button><button type="button" data-e="🎵">🎵</button><button type="button" data-e="😂">😂</button><button type="button" data-e="✨">✨</button><button type="button" data-e="🌿">🌿</button>
@@ -1625,6 +1676,7 @@ data:
       var guestbook = [];              // carved names on the fence
       var emotes = [];                 // {id, e, t}  floating emotes above sheep
       var nuzzles = [];                // {x, y, t}   auto hearts between close sheep
+      var challengeText = "", challengeDone = false;
       var pointer = { x: W/2, y: H/2, active:false };
       var meadowHour = 13;                   // shared meadow time-of-day (0-24), from server
       var rainbowUntil = 0, midnightUntil = 0, midnightSparkles = [], shootStars = [], nextShoot = 0, seasonParticles = [];
@@ -1710,12 +1762,19 @@ data:
           grass = new Array(COLS*ROWS).fill(6); resize();
           document.getElementById("youName").textContent = myName;
         } else if (m.t === "r"){
-          roster = {}; for (var k in m.roster){ var e=m.roster[k]; roster[k] = { name:e[0], hue:e[1], role:e[2]||"", color:(e[3]==null?-1:e[3]), hat:e[4]||"", points:e[5]||0, title:e[6]||"" }; }
+          roster = {}; for (var k in m.roster){ var e=m.roster[k]; roster[k] = { name:e[0], hue:e[1], role:e[2]||"", color:(e[3]==null?-1:e[3]), hat:e[4]||"", points:e[5]||0, title:e[6]||"", badges:e[7]||0 }; }
           if (myId!=null && roster[myId]){
             document.getElementById("youName").textContent = roster[myId].name;      // real (customized) name
             document.getElementById("chillPts").textContent = roster[myId].points;
             document.getElementById("youTitle").textContent = roster[myId].title;
+            document.getElementById("badges").textContent = roster[myId].badges;
           }
+        } else if (m.t === "challenge"){
+          challengeText = m.text; challengeDone = m.done; renderChallenge();
+          if (!m.done && m.text) showPToast("🎯 Today's Challenge: " + m.text, 6500);
+        } else if (m.t === "challenge-done"){
+          challengeDone = true; renderChallenge();
+          showPToast("🏅 Challenge complete! +10 chill 🌿", 5000);
         } else if (m.t === "book"){
           guestbook = m.entries || []; renderBook();
         } else if (m.t === "carved"){
@@ -1754,6 +1813,7 @@ data:
         } else if (m.t === "event"){
           if (m.kind === "rainbow") rainbowUntil = performance.now() + 25000;
           else if (m.kind === "midnight") triggerMidnight();
+          else if (m.kind === "summon-rain") showPToast("🌧️ The herd summoned the rain!", 4500);
         }
       }
       connect();
@@ -2275,6 +2335,18 @@ data:
           d.appendChild(document.createTextNode(" — " + g.text)); bl.appendChild(d); }
         bl.scrollTop = bl.scrollHeight;
       }
+      var challengeBox = document.getElementById("challengeBox");
+      function renderChallenge(){
+        if (!challengeBox) return; challengeBox.innerHTML = "";
+        if (!challengeText){ challengeBox.textContent = "🎯 Today's challenge is loading…"; return; }
+        var lab = document.createElement("span"); lab.innerHTML = "🎯 <b>Today's Challenge:</b> ";
+        challengeBox.appendChild(lab);
+        challengeBox.appendChild(document.createTextNode(challengeText + " "));
+        if (challengeDone){ var ok = document.createElement("span"); ok.className = "ok"; ok.textContent = "✓ done!"; challengeBox.appendChild(ok); }
+      }
+      var ptoast = document.getElementById("ptoast"), ptoastT;
+      function showPToast(text, ms){ ptoast.textContent = text; ptoast.classList.add("show"); clearTimeout(ptoastT); ptoastT = setTimeout(function(){ ptoast.classList.remove("show"); }, ms || 4000); }
+
       var bookpanel = document.getElementById("bookpanel"), carveIn = document.getElementById("carveIn");
       document.getElementById("bookBtn").addEventListener("click", function(){ bookpanel.hidden = !bookpanel.hidden; if (!bookpanel.hidden) renderBook(); });
       function carve(){ var t = carveIn.value.trim(); if (!t) return; if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"carve", text:t })); carveIn.value=""; }
