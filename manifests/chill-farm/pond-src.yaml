@@ -58,6 +58,7 @@ data:
     const byToken = new Map();
     const usedSlots = new Set();
     let catchLog = [];
+    let chatHistory = [];
     let nextId = 1;
 
     function clean(s, max) { return String(s == null ? '' : s).replace(/[\x00-\x1f\x7f]/g, '').slice(0, max).trim(); }
@@ -111,6 +112,7 @@ data:
       sock.on('error', () => drop(c));
       send(c, { t: 'welcome', id });
       send(c, { t: 'log', entries: catchLog });
+      send(c, { t: 'chathist', msgs: chatHistory });
       broadcastRoster();
     }
 
@@ -172,6 +174,13 @@ data:
         if (!c.casting) return;
         clearTimeout(c.biteTimer); c.casting = false;
         broadcastRoster();
+      } else if (m.t === 'chat') {
+        const text = clean(m.text, 160);
+        if (!text || Date.now() - (c.lastChat || 0) < 700) return;
+        c.lastChat = Date.now();
+        const msg = { id: c.id, name: c.name, hue: c.hue, text, ts: Date.now() };
+        chatHistory.push(msg); if (chatHistory.length > 20) chatHistory.shift();
+        broadcast({ t: 'chat', m: msg });
       }
     }
 

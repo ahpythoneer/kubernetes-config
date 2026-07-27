@@ -18,7 +18,7 @@ spec:
       labels:
         app: chill-pond
       annotations:
-        chill-pond/src-rev: "1"
+        chill-pond/src-rev: "2"
     spec:
       containers:
       - name: pond

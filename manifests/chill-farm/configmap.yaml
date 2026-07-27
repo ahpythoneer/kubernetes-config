@@ -1577,6 +1577,19 @@ data:
       .emotebar button{width:34px;height:34px;border:none;border-radius:50%;background:rgba(255,255,255,.08);cursor:pointer;font-size:1.05rem;line-height:1;padding:0;}
       .emotebar button:hover{background:rgba(217,164,65,.3);}
       @media (max-width:520px){ .emotebar button{width:30px;height:30px;font-size:.95rem;} }
+      .chatdock{position:fixed;left:12px;bottom:12px;z-index:16;display:flex;gap:.4rem;align-items:center;
+        background:rgba(30,20,12,.78);border:1px solid rgba(217,164,65,.5);border-radius:30px;padding:.35rem .4rem .35rem .9rem;
+        backdrop-filter:blur(5px);width:min(340px,52vw);}
+      .chatdock input{flex:1;min-width:0;font:inherit;font-size:16px;border:none;outline:none;background:transparent;color:#fff;}
+      .chatdock input::placeholder{color:rgba(255,255,255,.5);}
+      .chatdock #chatSend{flex:0 0 auto;border:none;border-radius:50%;width:32px;height:32px;background:var(--wheat);color:var(--saddle-dk);cursor:pointer;font-size:1rem;padding:0;}
+      .chatlog{position:fixed;left:12px;bottom:62px;z-index:15;width:min(340px,60vw);display:flex;flex-direction:column;gap:.2rem;pointer-events:none;align-items:flex-start;}
+      .chatlog .cm{background:rgba(30,20,12,.6);border-radius:12px;padding:.25rem .6rem;font-size:.8rem;color:#f0e4cf;max-width:100%;
+        word-wrap:break-word;animation:cmIn .3s var(--ease);transition:opacity .6s;}
+      .chatlog .cm.fade{opacity:0;}
+      .chatlog .cm b{color:#ffd98a;font-family:var(--mono);font-size:.72rem;margin-right:.3rem;}
+      @keyframes cmIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+      @media (max-width:600px){ .emotebar{bottom:60px;} .chatdock{width:calc(100vw - 24px);} .chatlog{width:60vw;bottom:110px;} }
       .ptoast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%) translateY(160%);z-index:12;
         background:var(--saddle-dk);color:#ffe6ad;border:2px solid var(--wheat);border-radius:30px;padding:.6rem 1.2rem;
         font-family:var(--mono);font-size:.82rem;letter-spacing:.03em;box-shadow:0 12px 30px rgba(0,0,0,.5);
@@ -1636,6 +1649,12 @@ data:
       <button type="button" data-e="💛">💛</button><button type="button" data-e="💤">💤</button><button type="button" data-e="🎵">🎵</button><button type="button" data-e="😂">😂</button><button type="button" data-e="✨">✨</button><button type="button" data-e="🌿">🌿</button>
     </div>
 
+    <div class="chatlog" id="chatlog"></div>
+    <div class="chatdock" id="chatdock">
+      <input id="chatIn" maxlength="160" placeholder="say something to the herd…" autocomplete="off" enterkeyhint="send" />
+      <button type="button" id="chatSend" aria-label="send">➤</button>
+    </div>
+
     <div class="askbar" id="askbar" hidden>
       <span id="askLabel">Ask</span>
       <input id="askIn" maxlength="140" placeholder="type your question…" autocomplete="off" enterkeyhint="send" />
@@ -1660,6 +1679,7 @@ data:
       var baas = [];                   // {x,y,t}
       var execBubbles = {};            // id -> {text, t}  (AI banter above the exec sheep)
       var qBubbles = {};               // id -> {text, t}  (visitor questions above the asker)
+      var chatBubbles = {};            // id -> {text, t}  (player chat above their sheep)
       var askTarget = null;            // exec id currently being asked
       var guestbook = [];              // carved names on the fence
       var emotes = [];                 // {id, e, t}  floating emotes above sheep
@@ -1775,6 +1795,11 @@ data:
           guestbook.push(m.entry); if (guestbook.length > 60) guestbook.shift(); renderBook();
         } else if (m.t === "emote"){
           emotes.push({ id:m.id, e:m.e, t:performance.now() });
+        } else if (m.t === "chat"){
+          chatBubbles[m.m.id] = { text:m.m.text, t:performance.now() };
+          addChatLine(m.m.name, m.m.hue, m.m.text);
+        } else if (m.t === "chathist"){
+          (m.msgs||[]).forEach(function(x){ addChatLine(x.name, x.hue, x.text); });
         } else if (m.t === "s"){
           var seen = {};
           for (var i=0;i<m.sheep.length;i++){
@@ -1824,7 +1849,7 @@ data:
       }
       addEventListener("pointermove", setPointerFromEvent, { passive:true });
       addEventListener("pointerdown", function(e){
-        if (e.target && e.target.closest && e.target.closest(".askbar, .cpanel, .hud, .emotebar")) return;  // ignore UI taps
+        if (e.target && e.target.closest && e.target.closest(".askbar, .cpanel, .hud, .emotebar, .chatdock, .chatlog")) return;  // ignore UI taps
         setPointerFromEvent(e);
         var hit = execAtScreen(e);
         if (hit != null){ if ((roster[hit] || {}).role === "TRAIN") pokeTrain(); else openAsk(hit); }
@@ -1937,6 +1962,14 @@ data:
           var es = sheep[eid]; if (!es) continue;
           ctx.globalAlpha = (now - eb.t > 6200) ? Math.max(0, (7000-(now-eb.t))/800) : 1;
           drawSpeechBubble(toScreenX(es.rx), toScreenY(es.ry) - view.s*44, eb.text);
+          ctx.globalAlpha = 1;
+        }
+        // player chat bubbles
+        for (var chid in chatBubbles){
+          var chb = chatBubbles[chid]; if (now - chb.t > 6500){ delete chatBubbles[chid]; continue; }
+          var chs = sheep[chid]; if (!chs) continue;
+          ctx.globalAlpha = (now - chb.t > 5700) ? Math.max(0, (6500-(now-chb.t))/800) : 1;
+          drawSpeechBubble(toScreenX(chs.rx), toScreenY(chs.ry) - view.s*44, chb.text);
           ctx.globalAlpha = 1;
         }
 
@@ -2349,6 +2382,19 @@ data:
       Array.prototype.forEach.call(document.querySelectorAll(".emotebar button"), function(b){
         b.addEventListener("click", function(){ if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"emote", e:b.getAttribute("data-e") })); });
       });
+
+      // ---------- player chat ----------
+      var chatlogEl = document.getElementById("chatlog"), chatIn = document.getElementById("chatIn");
+      function addChatLine(name, hue, text){
+        var d = document.createElement("div"); d.className = "cm";
+        var b = document.createElement("b"); b.textContent = name; b.style.color = "hsl("+hue+",70%,80%)"; d.appendChild(b);
+        d.appendChild(document.createTextNode(text)); chatlogEl.appendChild(d);
+        while (chatlogEl.children.length > 5) chatlogEl.removeChild(chatlogEl.firstChild);
+        setTimeout(function(){ d.classList.add("fade"); setTimeout(function(){ if (d.parentNode) d.remove(); }, 700); }, 12000);
+      }
+      function sendChat(){ var t = chatIn.value.trim(); if (!t) return; if (ws && ws.readyState===1) ws.send(JSON.stringify({ t:"chat", text:t })); chatIn.value = ""; }
+      document.getElementById("chatSend").addEventListener("click", sendChat);
+      chatIn.addEventListener("keydown", function(e){ if (e.key==="Enter"){ e.preventDefault(); sendChat(); } });
       setInterval(function(){
         if (reduce) return; var ids = Object.keys(sheep);
         for (var i=0;i<ids.length;i++) for (var j=i+1;j<ids.length;j++){ var a=sheep[ids[i]], b=sheep[ids[j]]; if(!a||!b) continue;
@@ -2741,6 +2787,17 @@ data:
       .log h4{margin:0 0 .4rem;font-family:var(--display);font-size:.9rem;color:#ffe6ad;text-transform:uppercase;letter-spacing:.04em;}
       .log .row b{color:#ffd98a;}
       @media (max-width:560px){ .log{max-height:26vh;width:74vw;} }
+      .chatdock{position:fixed;left:12px;bottom:12px;z-index:16;display:flex;gap:.4rem;align-items:center;
+        background:rgba(20,40,45,.72);border:1px solid rgba(217,164,65,.5);border-radius:30px;padding:.35rem .4rem .35rem .9rem;
+        backdrop-filter:blur(5px);width:min(320px,42vw);}
+      .chatdock input{flex:1;min-width:0;font:inherit;font-size:16px;border:none;outline:none;background:transparent;color:#fff;}
+      .chatdock input::placeholder{color:rgba(255,255,255,.5);}
+      .chatdock #chatSend{flex:0 0 auto;border:none;border-radius:50%;width:32px;height:32px;background:var(--wheat);color:var(--saddle-dk);cursor:pointer;font-size:1rem;padding:0;}
+      .chatlog{position:fixed;left:12px;bottom:62px;z-index:15;width:min(320px,52vw);display:flex;flex-direction:column;gap:.2rem;pointer-events:none;align-items:flex-start;}
+      .chatlog .cm{background:rgba(20,40,45,.6);border-radius:12px;padding:.25rem .6rem;font-size:.8rem;color:#dfeceb;max-width:100%;word-wrap:break-word;transition:opacity .6s;}
+      .chatlog .cm.fade{opacity:0;}
+      .chatlog .cm b{color:#ffd98a;font-family:var(--mono);font-size:.72rem;margin-right:.3rem;}
+      @media (max-width:600px){ .castbtn{bottom:66px;} .chatdock{width:calc(100vw - 24px);} .chatlog{width:60vw;bottom:112px;} .log{top:54px;bottom:auto;max-height:20vh;} }
 
       .hint{position:fixed;left:50%;bottom:82px;transform:translateX(-50%);z-index:15;pointer-events:none;
         background:rgba(20,40,45,.55);color:#dfeceb;border:1px solid rgba(217,164,65,.35);border-radius:30px;
@@ -2770,6 +2827,12 @@ data:
 
     <div class="log" id="log"><h4>🐟 The Catch Log</h4><div id="logrows"></div></div>
 
+    <div class="chatlog" id="chatlog"></div>
+    <div class="chatdock" id="chatdock">
+      <input id="chatIn" maxlength="160" placeholder="say something…" autocomplete="off" enterkeyhint="send" />
+      <button type="button" id="chatSend" aria-label="send">➤</button>
+    </div>
+
     <div class="conn" id="conn"><div><div class="big">🎣 finding the pond…</div><div id="connMsg">wading out to a good spot</div></div></div>
 
     <script>
@@ -2778,7 +2841,7 @@ data:
       var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
       var cv = document.getElementById("c"), ctx = cv.getContext("2d");
       var W = 1000, H = 620, PCX = 500, PCY = 300, PRX = 400, PRY = 210, SPOTS = 14;
-      var anglers = {}, myId = null, myCasting = false, catchPops = [], lilies = [];
+      var anglers = {}, myId = null, myCasting = false, catchPops = [], lilies = [], chatBubbles = {};
       var connEl = document.getElementById("conn"), connMsg = document.getElementById("connMsg");
       var countEl = document.getElementById("count"), castbtn = document.getElementById("castbtn");
       var logrows = document.getElementById("logrows");
@@ -2833,6 +2896,8 @@ data:
           catchLog.push({name:m.name,catch:m.catch,ts:Date.now()}); if(catchLog.length>30)catchLog.shift(); renderLog();
           var ang=anglers[m.id]; if(ang) catchPops.push({ id:m.id, text:m.catch, t:performance.now() });
         }
+        else if (m.t==="chat"){ chatBubbles[m.m.id]={ text:m.m.text, t:performance.now() }; addChatLine(m.m.name, m.m.hue, m.m.text); }
+        else if (m.t==="chathist"){ (m.msgs||[]).forEach(function(x){ addChatLine(x.name, x.hue, x.text); }); }
       }
       connect();
 
@@ -2852,6 +2917,33 @@ data:
       castbtn.addEventListener("click", function(){ myCasting ? reel() : cast(); });
       var hintEl=document.getElementById("hint"), hintT=setTimeout(function(){ hintEl.classList.add("fade"); }, 9000);
       cv.addEventListener("pointerdown", function(){ hintEl.classList.add("fade"); if(!myCasting) cast(); });
+
+      // ---------- player chat ----------
+      var chatlogEl=document.getElementById("chatlog"), chatIn=document.getElementById("chatIn");
+      function addChatLine(name, hue, text){
+        var d=document.createElement("div"); d.className="cm"; var b=document.createElement("b"); b.textContent=name; b.style.color="hsl("+hue+",70%,80%)"; d.appendChild(b);
+        d.appendChild(document.createTextNode(text)); chatlogEl.appendChild(d);
+        while(chatlogEl.children.length>5) chatlogEl.removeChild(chatlogEl.firstChild);
+        setTimeout(function(){ d.classList.add("fade"); setTimeout(function(){ if(d.parentNode)d.remove(); }, 700); }, 12000);
+      }
+      function sendChat(){ var t=chatIn.value.trim(); if(!t)return; if(ws&&ws.readyState===1) ws.send(JSON.stringify({t:"chat",text:t})); chatIn.value=""; }
+      document.getElementById("chatSend").addEventListener("click", sendChat);
+      chatIn.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); sendChat(); } });
+
+      function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+      function drawBubble(cx, baseY, text){
+        var u=view.s; ctx.font="600 "+(u*13)+"px system-ui,sans-serif";
+        var words=text.split(" "), lines=[], cur="";
+        for(var i=0;i<words.length;i++){ var tst=cur?cur+" "+words[i]:words[i]; if(ctx.measureText(tst).width>u*150&&cur){lines.push(cur);cur=words[i];}else cur=tst; }
+        if(cur)lines.push(cur); if(lines.length>3){lines=lines.slice(0,3);lines[2]=lines[2].slice(0,22)+"…";}
+        var w=0; for(var l=0;l<lines.length;l++)w=Math.max(w,ctx.measureText(lines[l]).width);
+        var padX=u*8,padY=u*5,lh=u*15,bw=w+padX*2,bh=lines.length*lh+padY*2,bx=cx-bw/2,by=baseY-bh;
+        ctx.fillStyle="rgba(251,244,226,.96)"; ctx.strokeStyle="rgba(20,50,55,.5)"; ctx.lineWidth=Math.max(1,u);
+        roundRect(bx,by,bw,bh,u*8); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx-u*5,by+bh-1); ctx.lineTo(cx+u*5,by+bh-1); ctx.lineTo(cx,by+bh+u*7); ctx.closePath(); ctx.fillStyle="rgba(251,244,226,.96)"; ctx.fill();
+        ctx.fillStyle="#22303a"; ctx.textAlign="center";
+        for(var l2=0;l2<lines.length;l2++) ctx.fillText(lines[l2],cx,by+padY+lh*(l2+1)-u*3.5);
+      }
 
       // ---------- render ----------
       function render(now){
@@ -2887,6 +2979,12 @@ data:
           ctx.fillStyle="#fff"; ctx.strokeStyle="rgba(20,50,55,.6)"; ctx.lineWidth=view.s*3;
           ctx.strokeText("“"+cp.text+"”", px, py); ctx.fillText("“"+cp.text+"”", px, py);
           ctx.globalAlpha=1;
+        }
+        // player chat bubbles above anglers
+        for (var cbid in chatBubbles){ var cb=chatBubbles[cbid]; if(now-cb.t>6500){ delete chatBubbles[cbid]; continue; }
+          var ang2=anglers[cbid]; if(!ang2) continue; var bp2=bankPos(ang2.slot);
+          ctx.globalAlpha=(now-cb.t>5700)?Math.max(0,(6500-(now-cb.t))/800):1;
+          drawBubble(X(bp2.x), Y(bp2.y)-view.s*30, cb.text); ctx.globalAlpha=1;
         }
         requestAnimationFrame(render);
       }
