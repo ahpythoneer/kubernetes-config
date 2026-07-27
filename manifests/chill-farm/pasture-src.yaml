@@ -108,6 +108,8 @@ data:
     const DATA_FILE = process.env.DATA_FILE || '/data/state.json';
     const profiles = new Map();          // token -> { name, color, hat, points, first, last }
     let guestbook = [];                  // [{ name, text, ts }]
+    let chatHistory = [];                // recent player chat (newest last)
+    function cleanChat(s) { return String(s == null ? '' : s).replace(/[\x00-\x1f\x7f]/g, '').slice(0, 160).trim(); }
     let forecast = { date: '', text: '' };
     function realCount() { let n = 0; for (const c of clients.values()) if (!c.spectator) n++; return n; }
     function todayStr() { return new Date().toISOString().slice(0, 10); }
@@ -434,6 +436,7 @@ data:
       send(c, { t: 'welcome', id, w: W, h: H, cols: COLS, rows: ROWS, name: c.name });
       sendGrass(c);
       send(c, { t: 'book', entries: guestbook });
+      send(c, { t: 'chathist', msgs: chatHistory });
       broadcastRoster();
     }
 
@@ -558,6 +561,13 @@ data:
         c.lastEmote = Date.now();
         broadcast({ t: 'emote', id: c.id, e: m.e });
         completeChallenge(c, 'emote');
+      } else if (m.t === 'chat') {
+        const text = cleanChat(m.text);
+        if (!text || Date.now() - (c.lastChat || 0) < 700) return;   // gentle anti-spam
+        c.lastChat = Date.now();
+        const msg = { id: c.id, name: c.name, hue: c.hue, text, ts: Date.now() };
+        chatHistory.push(msg); if (chatHistory.length > 20) chatHistory.shift();
+        broadcast({ t: 'chat', m: msg });
       } else if (m.t === 'spectate') {
         c.spectator = true;                               // read-only meadow-cam: no sheep, not counted
         broadcastRoster();
