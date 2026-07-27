@@ -1527,6 +1527,9 @@ data:
         color:#ffe6ad;font-family:var(--mono);font-size:.9rem;letter-spacing:.08em;text-align:center;transition:opacity .6s;}
       .conn.hide{opacity:0;pointer-events:none;}
       .conn .big{font-family:var(--display);font-size:1.6rem;text-transform:uppercase;margin-bottom:.4rem;color:#fff;}
+      .conn #takeover{margin-top:1rem;font-family:var(--display);text-transform:uppercase;letter-spacing:.05em;font-size:1rem;
+        color:#f4ead0;background:var(--terra);border:2px solid var(--saddle-dk);border-radius:30px;padding:.6rem 1.6rem;cursor:pointer;box-shadow:0 5px 0 var(--saddle-dk);}
+      .conn #takeover[hidden]{display:none;}
 
       .cpanel{position:fixed;top:60px;right:12px;z-index:9;width:min(280px,92vw);background:rgba(30,20,12,.9);
         border:2px solid var(--wheat);border-radius:16px;padding:.9rem 1rem;backdrop-filter:blur(6px);
@@ -1642,7 +1645,7 @@ data:
 
     <div class="hint" id="hint">move your pointer (or drag) — your 🤠 sheep ambles over · tap an exec 👔 to ask them anything · tap grass to baa</div>
 
-    <div class="conn" id="conn"><div><div class="big">🌾 finding the meadow…</div><div id="connMsg">connecting you to the pasture</div></div></div>
+    <div class="conn" id="conn"><div><div class="big">🌾 finding the meadow…</div><div id="connMsg">connecting you to the pasture</div><button id="takeover" type="button" hidden>🐑 Take over here</button></div></div>
 
     <script>
     (function(){
@@ -1728,10 +1731,11 @@ data:
           if (myCustom.color >= 0 || myCustom.hat || myCustom.name) sendCustom();
         };
         ws.onclose = function(ev){
-          if (ev && ev.code === 4001){                    // taken over by another tab of the same browser
+          if (ev && ev.code === 4001){                    // taken over by another tab/window of the same browser
             replaced = true; connEl.classList.remove("hide");
             connEl.querySelector(".big").textContent = "🐑 Already grazing";
-            connMsg.textContent = "You're chilling in another tab. Refresh here to bring your sheep back.";
+            connMsg.textContent = "Your sheep is active in another tab or window.";
+            document.getElementById("takeover").hidden = false;
             return;
           }
           connEl.classList.remove("hide"); connMsg.textContent = "reconnecting…"; scheduleRetry();
@@ -1740,6 +1744,11 @@ data:
         ws.onmessage = function(ev){ onMsg(ev.data); };
       }
       function scheduleRetry(){ if (replaced) return; retry = Math.min(retry+1, 6); setTimeout(connect, 500*retry); }
+      document.getElementById("takeover").addEventListener("click", function(){
+        this.hidden = true; replaced = false; retry = 0;
+        connEl.querySelector(".big").textContent = "🌾 taking your spot back…"; connMsg.textContent = "reconnecting…";
+        connect();
+      });
       function onMsg(data){
         var m; try { m = JSON.parse(data); } catch(e){ return; }
         if (m.t === "welcome"){
