@@ -482,6 +482,7 @@ data:
                     log.info('DGX offline — K8s Ollama only')
 
     def main():
+        global JOPLIN_TOKEN
         log.info('=== Hermes Orchestrator Starting ===')
         if not JOPLIN_TOKEN:
             log.error('JOPLIN_TOKEN not set')
