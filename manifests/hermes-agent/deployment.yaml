@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hermes-skills
+  namespace: hermes-agent
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: nfs-storage
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes-agent
+  namespace: hermes-agent
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  selector:
+    app: hermes-agent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-agent
+  namespace: hermes-agent
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: hermes-agent
+  template:
+    metadata:
+      labels:
+        app: hermes-agent
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "hermes-agent"
+        vault.hashicorp.com/agent-inject-secret-config: "secret/data/hermes-agent/config"
+        vault.hashicorp.com/agent-inject-template-config: |
+          {{- with secret "secret/data/hermes-agent/config" -}}
+          export JOPLIN_TOKEN="{{ .Data.data.joplin_token }}"
+          {{- end }}
+    spec:
+      serviceAccountName: hermes-agent
+      containers:
+      - name: orchestrator
+        image: python:3.11-slim
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          source /vault/secrets/config
+          python /app/orchestrator.py
+        ports:
+        - name: http
+          containerPort: 8080
+        env:
+        - name: JOPLIN_HOST
+          value: "http://joplin-server.joplin.svc.cluster.local:22300"
+        - name: K8S_OLLAMA_URL
+          value: "http://ollama.ollama.svc.cluster.local:11434"
+        - name: DGX_OLLAMA_URL
+          value: "http://10.0.129.94:11434"
+        - name: BROWSER_SVC_URL
+          value: "http://browser-service.browser-service.svc.cluster.local:3000"
+        - name: K8S_MODEL
+          value: "hermes3:8b-64k"
+        - name: DGX_MODEL
+          value: "hermes3:70b"
+        - name: POLL_INTERVAL
+          value: "60"
+        volumeMounts:
+        - name: config
+          mountPath: /app/orchestrator.py
+          subPath: orchestrator.py
+        - name: config
+          mountPath: /app/SOUL.md
+          subPath: SOUL.md
+        - name: config
+          mountPath: /app/providers.yaml
+          subPath: providers.yaml
+        - name: skills
+          mountPath: /app/skills
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 250m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        livenessProbe:
+          exec:
+            command: ["python", "-c", "import os; os.path.exists('/app/orchestrator.py')"]
+          initialDelaySeconds: 30
+          periodSeconds: 60
+      volumes:
+      - name: config
+        configMap:
+          name: hermes-config
+      - name: skills
+        persistentVolumeClaim:
+          claimName: hermes-skills

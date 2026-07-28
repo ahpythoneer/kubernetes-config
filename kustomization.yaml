@@ -117,6 +117,12 @@ resources:
   - manifests/research-worker/configmap.yaml
   - manifests/research-worker/cronjob.yaml
 
+  # Hermes Agent — AI Orchestrator
+  - manifests/hermes-agent/namespace.yaml
+  - manifests/hermes-agent/rbac.yaml
+  - manifests/hermes-agent/configmap.yaml
+  - manifests/hermes-agent/deployment.yaml
+
   # Chill Farm — only-chill.com static site
   - manifests/chill-farm/namespace.yaml
   - manifests/chill-farm/configmap.yaml

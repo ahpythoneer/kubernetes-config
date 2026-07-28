@@ -1,0 +1,287 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hermes-config
+  namespace: hermes-agent
+data:
+  SOUL.md: |
+    # Hermes Agent — Homelab AI Orchestrator
+
+    You are the central AI orchestrator for a self-healing Kubernetes homelab.
+    Your purpose is to refine ideas from Joplin notes into actionable plans,
+    execute research, and produce high-quality outputs.
+
+    ## Your Environment
+    - K8s cluster: 4 nodes (2 control-plane, 2 workers)
+    - GPU (K8s): Tesla T4, 15GB VRAM — for fast, simple tasks
+    - GPU (DGX Spark): NVIDIA GB10, 128GB — for heavy reasoning
+    - Services: Joplin, Grafana, Prometheus, Harbor, Vaultwarden, Ollama
+    - Browser Service: available for web research
+
+    ## Your Workflow
+    1. **Watch**: Monitor Joplin for notes tagged `#hermes` or `#research`
+    2. **Classify**: Determine task complexity (simple → K8s Ollama, complex → DGX Spark)
+    3. **Research**: Use browser-service for web lookups when needed
+    4. **Plan**: Break complex tasks into steps
+    5. **Execute**: Process each step using the appropriate model
+    6. **Report**: Write results back to Joplin as refined notes
+
+    ## Guidelines
+    - Always cite sources when doing web research
+    - Break large tasks into subtasks
+    - Use the K8s Ollama (hermes3:8b-64k) for classification, tagging, summarization
+    - Use the DGX Spark Ollama (hermes3:70b) for deep reasoning, code gen, planning
+    - Never modify infrastructure without explicit approval
+    - Write results back to Joplin in clean, structured markdown
+
+  providers.yaml: |
+    providers:
+      k8s-ollama:
+        type: ollama
+        base_url: http://ollama.ollama.svc.cluster.local:11434
+        default_model: hermes3:8b-64k
+        description: "Fast local inference (Tesla T4) for simple tasks"
+        capabilities:
+          - classification
+          - summarization
+          - tagging
+          - quick-qa
+
+      dgx-spark:
+        type: ollama
+        base_url: http://10.0.129.94:11434
+        default_model: hermes3:70b
+        description: "Heavy inference (GB10 128GB) for complex reasoning"
+        capabilities:
+          - deep-reasoning
+          - code-generation
+          - research-synthesis
+          - planning
+          - long-form-writing
+
+    routing:
+      default_provider: k8s-ollama
+      complexity_threshold: 0.7
+      rules:
+        - pattern: "classify|tag|summarize|extract|quick"
+          provider: k8s-ollama
+        - pattern: "research|plan|design|analyze|implement|write|code"
+          provider: dgx-spark
+
+  orchestrator.py: |
+    #!/usr/bin/env python3
+    """
+    Hermes Ecosystem Orchestrator
+    Watches Joplin for tagged notes, routes to appropriate AI backend,
+    writes results back.
+    """
+    import os
+    import sys
+    import json
+    import time
+    import logging
+    import hashlib
+    import re
+    from urllib.request import Request, urlopen
+    from urllib.error import URLError
+    from urllib.parse import urlencode
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s'
+    )
+    log = logging.getLogger('orchestrator')
+
+    JOPLIN_HOST = os.environ.get('JOPLIN_HOST', 'http://joplin-server.joplin.svc.cluster.local:22300')
+    JOPLIN_TOKEN = os.environ.get('JOPLIN_TOKEN', '')
+    K8S_OLLAMA = os.environ.get('K8S_OLLAMA_URL', 'http://ollama.ollama.svc.cluster.local:11434')
+    DGX_OLLAMA = os.environ.get('DGX_OLLAMA_URL', 'http://10.0.129.94:11434')
+    BROWSER_SVC = os.environ.get('BROWSER_SVC_URL', 'http://browser-service.browser-service.svc.cluster.local:3000')
+    POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', '60'))
+    K8S_MODEL = os.environ.get('K8S_MODEL', 'hermes3:8b-64k')
+    DGX_MODEL = os.environ.get('DGX_MODEL', 'hermes3:70b')
+
+    PROCESSED_NOTES = set()
+
+    COMPLEX_KEYWORDS = [
+        'research', 'plan', 'design', 'analyze', 'implement',
+        'write', 'code', 'architect', 'deep dive', 'compare',
+        'strategy', 'review', 'audit', 'investigate'
+    ]
+
+    def api_call(url, data=None, method='GET'):
+        """Make an HTTP request and return parsed JSON."""
+        headers = {'Content-Type': 'application/json'}
+        body = json.dumps(data).encode() if data else None
+        req = Request(url, data=body, headers=headers, method=method)
+        try:
+            with urlopen(req, timeout=120) as resp:
+                return json.loads(resp.read().decode())
+        except URLError as e:
+            log.error(f'API call failed: {url} - {e}')
+            return None
+
+    def joplin_api(endpoint, method='GET', data=None):
+        """Call Joplin API (server mode - uses token auth)."""
+        sep = '&' if '?' in endpoint else '?'
+        url = f'{JOPLIN_HOST}{endpoint}{sep}token={JOPLIN_TOKEN}'
+        return api_call(url, data=data, method=method)
+
+    def get_tagged_notes(tag_name='hermes'):
+        """Find notes with a specific tag."""
+        tags = joplin_api('/api/tags')
+        if not tags or 'items' not in tags:
+            return []
+        tag_id = None
+        for tag in tags.get('items', []):
+            if tag.get('title', '').lower() == tag_name.lower():
+                tag_id = tag['id']
+                break
+        if not tag_id:
+            return []
+        notes = joplin_api(f'/api/tags/{tag_id}/notes')
+        if not notes or 'items' not in notes:
+            return []
+        return notes['items']
+
+    def classify_complexity(text):
+        """Determine if a task is simple or complex based on content."""
+        text_lower = text.lower()
+        complex_score = sum(1 for kw in COMPLEX_KEYWORDS if kw in text_lower)
+        word_count = len(text.split())
+        if complex_score >= 2 or word_count > 500:
+            return 'complex'
+        return 'simple'
+
+    def query_ollama(prompt, complexity='simple'):
+        """Route query to appropriate Ollama backend."""
+        if complexity == 'complex':
+            base_url = DGX_OLLAMA
+            model = DGX_MODEL
+            log.info(f'Routing to DGX Spark ({model})')
+        else:
+            base_url = K8S_OLLAMA
+            model = K8S_MODEL
+            log.info(f'Routing to K8s Ollama ({model})')
+
+        result = api_call(f'{base_url}/api/generate', data={
+            'model': model,
+            'prompt': prompt,
+            'stream': False,
+            'options': {'num_ctx': 65536}
+        })
+        if result:
+            return result.get('response', '')
+        return None
+
+    def process_note(note):
+        """Process a single Joplin note through the AI pipeline."""
+        note_id = note['id']
+        title = note.get('title', 'Untitled')
+
+        note_hash = hashlib.md5(f"{note_id}:{note.get('updated_time',0)}".encode()).hexdigest()
+        if note_hash in PROCESSED_NOTES:
+            return
+
+        log.info(f'Processing note: {title}')
+
+        full_note = joplin_api(f'/api/notes/{note_id}?fields=body,title')
+        if not full_note:
+            return
+
+        body = full_note.get('body', '')
+        complexity = classify_complexity(body)
+        log.info(f'Classified as: {complexity}')
+
+        prompt = f"""You are a research assistant. Process the following note and provide:
+    1. A refined, well-structured version of the content
+    2. Key insights or action items extracted
+    3. Suggestions for next steps
+
+    ## Note Title: {title}
+
+    ## Note Content:
+    {body}
+
+    ## Instructions:
+    - Maintain the original intent
+    - Add structure with headers and bullet points
+    - Highlight actionable items with checkboxes
+    - If research is needed, list specific questions to investigate
+    """
+
+        response = query_ollama(prompt, complexity)
+        if not response:
+            log.error(f'Failed to get AI response for: {title}')
+            return
+
+        result_body = f"""# AI-Refined: {title}
+
+    *Processed by Hermes Agent | Complexity: {complexity}*
+    *Model: {DGX_MODEL if complexity == 'complex' else K8S_MODEL}*
+
+    ---
+
+    {response}
+
+    ---
+    *Original note: [{title}](joplin://note/{note_id})*
+    """
+
+        joplin_api('/api/notes', method='POST', data={
+            'title': f'[Hermes] {title}',
+            'body': result_body,
+        })
+
+        PROCESSED_NOTES.add(note_hash)
+        log.info(f'Completed: {title} -> [Hermes] {title}')
+
+    def health_check():
+        """Check connectivity to all services."""
+        services = {
+            'Joplin': f'{JOPLIN_HOST}/api/ping',
+            'K8s Ollama': f'{K8S_OLLAMA}/api/tags',
+            'DGX Ollama': f'{DGX_OLLAMA}/api/tags',
+        }
+        all_ok = True
+        for name, url in services.items():
+            try:
+                req = Request(url, method='GET')
+                with urlopen(req, timeout=5) as resp:
+                    log.info(f'{name}: OK')
+            except Exception as e:
+                log.warning(f'{name}: UNREACHABLE ({e})')
+                if name == 'DGX Ollama':
+                    log.info('DGX Spark offline — will use K8s Ollama only')
+                else:
+                    all_ok = False
+        return all_ok
+
+    def main():
+        log.info('=== Hermes Ecosystem Orchestrator Starting ===')
+
+        if not JOPLIN_TOKEN:
+            log.error('JOPLIN_TOKEN not set. Cannot connect to Joplin.')
+            log.info('Waiting for token configuration...')
+            while not os.environ.get('JOPLIN_TOKEN'):
+                time.sleep(30)
+
+        health_check()
+
+        log.info(f'Polling Joplin every {POLL_INTERVAL}s for #hermes tagged notes')
+        while True:
+            try:
+                notes = get_tagged_notes('hermes')
+                if notes:
+                    log.info(f'Found {len(notes)} tagged note(s)')
+                    for note in notes:
+                        process_note(note)
+                else:
+                    log.debug('No new tagged notes')
+            except Exception as e:
+                log.error(f'Poll cycle error: {e}')
+
+            time.sleep(POLL_INTERVAL)
+
+    if __name__ == '__main__':
+        main()
