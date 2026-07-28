@@ -210,14 +210,17 @@ data:
 
     def extract_diff_text(diff_json_str):
         try:
-            diffs = json.loads(diff_json_str)
+            parsed = json.loads(diff_json_str)
+            if isinstance(parsed, str):
+                parsed = json.loads(parsed)
             parts = []
-            for patch in diffs:
-                for op, text in patch.get('diffs', []):
-                    if op == 1:
-                        parts.append(text)
+            for patch in parsed:
+                if isinstance(patch, dict):
+                    for op, text in patch.get('diffs', []):
+                        if op == 1:
+                            parts.append(text)
             return ''.join(parts).replace('\\n', '\n')
-        except (json.JSONDecodeError, TypeError, KeyError):
+        except (json.JSONDecodeError, TypeError, KeyError, ValueError):
             return ''
 
     def parse_delta_format(content):
@@ -236,8 +239,10 @@ data:
         meta_diff = metadata.get('metadata_diff', '{}')
         try:
             meta_obj = json.loads(meta_diff)
+            if isinstance(meta_obj, str):
+                meta_obj = json.loads(meta_obj)
             new_meta = meta_obj.get('new', {})
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError, ValueError):
             new_meta = {}
         deleted_time = new_meta.get('deleted_time', 0)
         if deleted_time and deleted_time > 0:
