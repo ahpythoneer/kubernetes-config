@@ -83,7 +83,8 @@ data:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
     log = logging.getLogger('hermes')
 
-    JOPLIN_HOST = os.environ.get('JOPLIN_HOST', 'https://joplin.racktocloud.com')
+    JOPLIN_HOST = os.environ.get('JOPLIN_HOST', 'http://joplin-server.joplin.svc.cluster.local:22300')
+    JOPLIN_ORIGIN = os.environ.get('JOPLIN_ORIGIN', 'joplin.racktocloud.com')
     JOPLIN_TOKEN = os.environ.get('JOPLIN_TOKEN', '')
     K8S_OLLAMA = os.environ.get('K8S_OLLAMA_URL', 'http://ollama.ollama.svc.cluster.local:11434')
     DGX_OLLAMA = os.environ.get('DGX_OLLAMA_URL', 'http://10.0.129.94:11434')
@@ -106,6 +107,7 @@ data:
         url = f'{JOPLIN_HOST}/api/items/root:/{path}:/content'
         req = Request(url)
         req.add_header('Cookie', f'sessionId={JOPLIN_TOKEN}')
+        req.add_header('Host', JOPLIN_ORIGIN)
         try:
             with urlopen(req, timeout=30) as resp:
                 data = resp.read()
@@ -126,6 +128,7 @@ data:
         body = content.encode('utf-8') if isinstance(content, str) else content
         req = Request(url, data=body, method='PUT')
         req.add_header('Cookie', f'sessionId={JOPLIN_TOKEN}')
+        req.add_header('Host', JOPLIN_ORIGIN)
         req.add_header('Content-Type', 'application/octet-stream')
         try:
             with urlopen(req, timeout=30) as resp:
@@ -141,6 +144,7 @@ data:
         url = f'{JOPLIN_HOST}/api/items/root:/:/children'
         req = Request(url)
         req.add_header('Cookie', f'sessionId={JOPLIN_TOKEN}')
+        req.add_header('Host', JOPLIN_ORIGIN)
         try:
             with urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode())
@@ -154,6 +158,7 @@ data:
             url += f'?cursor={cursor}'
         req = Request(url)
         req.add_header('Cookie', f'sessionId={JOPLIN_TOKEN}')
+        req.add_header('Host', JOPLIN_ORIGIN)
         try:
             with urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode())
@@ -474,6 +479,7 @@ data:
                 req = Request(url, method='GET')
                 if 'joplin' in name.lower():
                     req.add_header('Cookie', f'sessionId={JOPLIN_TOKEN}')
+                    req.add_header('Host', JOPLIN_ORIGIN)
                 with urlopen(req, timeout=10) as resp:
                     log.info(f'{name}: OK')
             except Exception as e:
