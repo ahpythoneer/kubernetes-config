@@ -122,10 +122,20 @@ data:
             return None
 
     def joplin_api(endpoint, method='GET', data=None):
-        """Call Joplin API (server mode - uses token auth)."""
-        sep = '&' if '?' in endpoint else '?'
-        url = f'{JOPLIN_HOST}{endpoint}{sep}token={JOPLIN_TOKEN}'
-        return api_call(url, data=data, method=method)
+        """Call Joplin Server API using session cookie auth."""
+        url = f'{JOPLIN_HOST}{endpoint}'
+        headers = {
+            'Content-Type': 'application/json',
+            'X-API-AUTH': JOPLIN_TOKEN,
+        }
+        body = json.dumps(data).encode() if data else None
+        req = Request(url, data=body, headers=headers, method=method)
+        try:
+            with urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode())
+        except URLError as e:
+            log.error(f'Joplin API failed: {url} - {e}')
+            return None
 
     def get_tagged_notes(tag_name='hermes'):
         """Find notes with a specific tag."""

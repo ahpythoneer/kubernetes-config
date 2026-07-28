@@ -65,7 +65,7 @@ spec:
           containerPort: 8080
         env:
         - name: JOPLIN_HOST
-          value: "http://joplin-server.joplin.svc.cluster.local:22300"
+          value: "https://joplin.racktocloud.com"
         - name: K8S_OLLAMA_URL
           value: "http://ollama.ollama.svc.cluster.local:11434"
         - name: DGX_OLLAMA_URL
