@@ -16,7 +16,7 @@ spec:
         app: chill-farm
       annotations:
         # bump this to force a rollout when the site content changes
-        chill-farm/content-rev: "22"
+        chill-farm/content-rev: "23"
     spec:
       containers:
       - name: nginx
@@ -71,6 +71,8 @@ spec:
             path: ranch/index.html
           - key: pond.html
             path: pond/index.html
+          - key: cross.html
+            path: cross/index.html
           - key: hall.html
             path: hall/index.html
           - key: news.html

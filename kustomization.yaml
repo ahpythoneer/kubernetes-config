@@ -143,3 +143,7 @@ resources:
   - manifests/chill-farm/pond-src.yaml
   - manifests/chill-farm/pond-deployment.yaml
   - manifests/chill-farm/pond-service.yaml
+  # Chill Farm — "/cross" Hoof It! crossy-road (dependency-free node WS server)
+  - manifests/chill-farm/cross-src.yaml
+  - manifests/chill-farm/cross-deployment.yaml
+  - manifests/chill-farm/cross-service.yaml
