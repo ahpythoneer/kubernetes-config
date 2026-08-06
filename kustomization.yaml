@@ -147,3 +147,7 @@ resources:
   - manifests/chill-farm/cross-src.yaml
   - manifests/chill-farm/cross-deployment.yaml
   - manifests/chill-farm/cross-service.yaml
+  # Chill Farm — "/splash" Super Soaker Splash water-fight (dependency-free node WS server)
+  - manifests/chill-farm/splash-src.yaml
+  - manifests/chill-farm/splash-deployment.yaml
+  - manifests/chill-farm/splash-service.yaml

@@ -45,6 +45,13 @@ spec:
             name: chill-cross
             port:
               number: 8080
+      - path: /xw
+        pathType: Prefix
+        backend:
+          service:
+            name: chill-splash
+            port:
+              number: 8080
       - path: /
         pathType: Prefix
         backend:
@@ -81,6 +88,13 @@ spec:
         backend:
           service:
             name: chill-cross
+            port:
+              number: 8080
+      - path: /xw
+        pathType: Prefix
+        backend:
+          service:
+            name: chill-splash
             port:
               number: 8080
       - path: /
