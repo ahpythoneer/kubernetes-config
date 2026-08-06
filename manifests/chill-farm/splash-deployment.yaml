@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chill-splash
+  namespace: chill-farm
+  labels:
+    app: chill-splash
+spec:
+  # single replica: authoritative in-memory water-fight state (one shared yard)
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: chill-splash
+  template:
+    metadata:
+      labels:
+        app: chill-splash
+      annotations:
+        chill-splash/src-rev: "1"
+    spec:
+      containers:
+      - name: splash
+        image: node:20-alpine
+        imagePullPolicy: IfNotPresent
+        command: ["node", "/app/server.js"]
+        env:
+        - name: PORT
+          value: "8080"
+        ports:
+        - name: ws
+          containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - name: src
+          mountPath: /app/server.js
+          subPath: server.js
+          readOnly: true
+        resources:
+          requests:
+            memory: "48Mi"
+            cpu: "50m"
+          limits:
+            memory: "192Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: ws
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: ws
+          initialDelaySeconds: 5
+          periodSeconds: 20
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+      volumes:
+      - name: src
+        configMap:
+          name: chill-splash-src
+          items:
+          - key: server.js
+            path: server.js
