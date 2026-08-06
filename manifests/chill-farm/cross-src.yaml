@@ -1,0 +1,223 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chill-cross-src
+  namespace: chill-farm
+  labels:
+    app: chill-cross
+data:
+  server.js: |
+    'use strict';
+    /* ============================================================
+       Chill Farm — "/cross" : Hoof It! (a chill Crossy-Road)
+       Sheep hop across lazy country lanes. Slow tractors bonk you
+       back; the grind-culture Train flattens you. No death — just a
+       startled mosey back to the meadow. Server-authoritative.
+       ============================================================ */
+    const http = require('http');
+    const crypto = require('crypto');
+
+    const PORT = process.env.PORT || 8080;
+    const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+    const COLS = 13, ROWS = 15, TICK = 50;      // 13x15 board, 20Hz
+    const TRAIN_LEN = 4;
+
+    // row 0 = start meadow (bottom), row ROWS-1 = goal meadow (top)
+    const LANES = [
+      { type: 'meadow' },
+      { type: 'road', dir: 1, speed: 1.0, gap: 5, len: 1.7, v: '🚜' },
+      { type: 'grass' },
+      { type: 'road', dir: -1, speed: 1.5, gap: 4, len: 1.5, v: '🚗' },
+      { type: 'road', dir: 1, speed: 1.9, gap: 6, len: 1.6, v: '🛻' },
+      { type: 'grass' },
+      { type: 'train' },
+      { type: 'grass' },
+      { type: 'road', dir: -1, speed: 1.2, gap: 5, len: 1.7, v: '🚜' },
+      { type: 'road', dir: 1, speed: 2.2, gap: 5, len: 1.5, v: '🚙' },
+      { type: 'grass' },
+      { type: 'road', dir: -1, speed: 1.6, gap: 4, len: 1.5, v: '🍋' },
+      { type: 'grass' },
+      { type: 'road', dir: 1, speed: 1.3, gap: 6, len: 1.7, v: '🚜' },
+      { type: 'meadow' },
+    ];
+    const TRAIN_ROW = LANES.findIndex((l) => l.type === 'train');
+
+    const offsets = new Array(ROWS).fill(0);
+    LANES.forEach((l, r) => { if (l.type === 'road') offsets[r] = Math.random() * COLS; });
+    let train = { state: 'idle', x: 0, dir: 1, until: Date.now() + 9000 };
+
+    const clients = new Map();
+    const byToken = new Map();
+    let nextId = 1;
+
+    function clean(s, max) { return String(s == null ? '' : s).replace(/[\x00-\x1f\x7f]/g, '').slice(0, max).trim(); }
+
+    function encode(str) {
+      const p = Buffer.from(str); const n = p.length; let head;
+      if (n < 126) head = Buffer.from([0x81, n]);
+      else if (n < 65536) { head = Buffer.alloc(4); head[0] = 0x81; head[1] = 126; head.writeUInt16BE(n, 2); }
+      else { head = Buffer.alloc(10); head[0] = 0x81; head[1] = 127; head.writeBigUInt64BE(BigInt(n), 2); }
+      return Buffer.concat([head, p]);
+    }
+    function sendRaw(c, buf) { try { c.sock.write(buf); } catch (e) { drop(c); } }
+    function send(c, obj) { sendRaw(c, encode(JSON.stringify(obj))); }
+    function broadcast(obj) { const b = encode(JSON.stringify(obj)); for (const c of clients.values()) sendRaw(c, b); }
+    const PING = Buffer.from([0x89, 0]);
+    function closeFrame(code) { const b = Buffer.alloc(4); b[0] = 0x88; b[1] = 2; b.writeUInt16BE(code, 2); return b; }
+
+    const server = http.createServer((req, res) => {
+      const url = req.url || '/';
+      if (url.endsWith('/healthz')) { res.writeHead(200); res.end('ok'); return; }
+      if (url.endsWith('/stats')) {
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
+        res.end(JSON.stringify({ players: clients.size }));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('hoof it :: ' + clients.size + ' sheep crossing');
+    });
+
+    server.on('upgrade', (req, sock) => {
+      const key = req.headers['sec-websocket-key'];
+      if (!key) { sock.destroy(); return; }
+      const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
+      sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
+      onConnect(sock);
+    });
+
+    function onConnect(sock) {
+      const id = nextId++;
+      const c = {
+        id, sock, buf: Buffer.alloc(0),
+        name: 'Sheep ' + id, hue: (id * 47) % 360,
+        col: (Math.random() * COLS) | 0, row: 0, score: 0, best: 0,
+        lastHop: 0, lastSeen: Date.now(), token: null, alive: true,
+      };
+      clients.set(id, c);
+      sock.setNoDelay(true);
+      sock.on('data', (chunk) => onData(c, chunk));
+      sock.on('close', () => drop(c));
+      sock.on('error', () => drop(c));
+      send(c, { t: 'welcome', id, cols: COLS, rows: ROWS, lanes: LANES, trainRow: TRAIN_ROW });
+      broadcastRoster();
+    }
+
+    function drop(c) {
+      if (!c.alive) return;
+      c.alive = false;
+      clients.delete(c.id);
+      if (c.token && byToken.get(c.token) === c.id) byToken.delete(c.token);
+      try { c.sock.destroy(); } catch (e) {}
+      broadcastRoster();
+    }
+
+    function onData(c, chunk) {
+      c.lastSeen = Date.now();
+      c.buf = Buffer.concat([c.buf, chunk]);
+      while (true) {
+        const b = c.buf; if (b.length < 2) return;
+        const opcode = b[0] & 0x0f, masked = b[1] & 0x80;
+        let len = b[1] & 0x7f, off = 2;
+        if (len === 126) { if (b.length < 4) return; len = b.readUInt16BE(2); off = 4; }
+        else if (len === 127) { if (b.length < 10) return; len = Number(b.readBigUInt64BE(2)); off = 10; }
+        if (len > 1_000_000) { drop(c); return; }
+        let mask; if (masked) { if (b.length < off + 4) return; mask = b.slice(off, off + 4); off += 4; }
+        if (b.length < off + len) return;
+        let pay = b.slice(off, off + len);
+        if (masked) { const o = Buffer.alloc(len); for (let i = 0; i < len; i++) o[i] = pay[i] ^ mask[i & 3]; pay = o; }
+        c.buf = b.slice(off + len);
+        if (opcode === 0x8) { drop(c); return; }
+        else if (opcode === 0x9) { sendRaw(c, Buffer.concat([Buffer.from([0x8a, pay.length & 0x7f]), pay])); }
+        else if (opcode === 0x1) { onMessage(c, pay.toString()); }
+      }
+    }
+
+    function onMessage(c, str) {
+      let m; try { m = JSON.parse(str); } catch (e) { return; }
+      if (m.t === 'hello') {
+        if (typeof m.token === 'string' && m.token.length <= 64) {
+          const prev = byToken.get(m.token);
+          if (prev && prev !== c.id && clients.has(prev)) { const old = clients.get(prev); try { old.sock.write(closeFrame(4001)); } catch (e) {} drop(old); }
+          c.token = m.token; byToken.set(m.token, c.id);
+        }
+        const nm = clean(m.name, 18); if (nm) c.name = nm;
+        broadcastRoster();
+      } else if (m.t === 'name') {
+        const nm = clean(m.name, 18); if (nm) { c.name = nm; broadcastRoster(); }
+      } else if (m.t === 'hop') {
+        const now = Date.now();
+        if (now - c.lastHop < 100) return;
+        c.lastHop = now;
+        if (m.d === 'up') c.row++; else if (m.d === 'down') c.row--; else if (m.d === 'left') c.col--; else if (m.d === 'right') c.col++;
+        c.col = Math.max(0, Math.min(COLS - 1, c.col));
+        c.row = Math.max(0, Math.min(ROWS - 1, c.row));
+        checkPlayer(c);
+      } else if (m.t === 'chat') {
+        const text = clean(m.text, 160);
+        if (!text || Date.now() - (c.lastChat || 0) < 700) return;
+        c.lastChat = Date.now();
+        broadcast({ t: 'chat', m: { id: c.id, name: c.name, hue: c.hue, text } });
+      }
+    }
+
+    function hitRoad(row, col) {
+      const L = LANES[row]; if (L.type !== 'road') return false;
+      const off = offsets[row], n = Math.ceil(COLS / L.gap) + 1;
+      for (let i = 0; i < n; i++) {
+        let p = ((i * L.gap + off) % COLS + COLS) % COLS;
+        if (col + 0.5 >= p && col + 0.5 < p + L.len) return true;
+        if (p + L.len > COLS && col + 0.5 < p + L.len - COLS) return true;   // wrapped span
+      }
+      return false;
+    }
+
+    function checkPlayer(c) {
+      if (c.row >= ROWS - 1) {                    // reached the far meadow — a crossing!
+        c.score++; if (c.score > c.best) c.best = c.score;
+        broadcast({ t: 'cross', id: c.id, score: c.score });
+        c.row = 0; c.col = (Math.random() * COLS) | 0;
+        broadcastRoster();
+        return;
+      }
+      const L = LANES[c.row];
+      let hit = false;
+      if (L.type === 'road') hit = hitRoad(c.row, c.col);
+      else if (L.type === 'train' && train.state === 'run') { const x = train.x; hit = (c.col + 0.5 >= x && c.col + 0.5 < x + TRAIN_LEN); }
+      if (hit) {
+        const wasTrain = L.type === 'train';
+        c.score = 0;                              // start the streak over
+        c.row = 0; c.col = (Math.random() * COLS) | 0;
+        broadcast({ t: 'bonk', id: c.id, train: wasTrain });
+        broadcastRoster();
+      }
+    }
+
+    function broadcastRoster() {
+      const players = [];
+      for (const c of clients.values()) players.push({ id: c.id, name: c.name, hue: c.hue, score: c.score, best: c.best });
+      broadcast({ t: 'r', players, n: clients.size });
+    }
+
+    // ---- simulation @ 20Hz ----
+    let last = Date.now();
+    setInterval(() => {
+      const now = Date.now(), dt = (now - last) / 1000; last = now;
+      for (let r = 0; r < ROWS; r++) { const L = LANES[r]; if (L.type === 'road') { offsets[r] = ((offsets[r] + L.dir * L.speed * dt) % COLS + COLS) % COLS; } }
+      // train state machine
+      if (train.state === 'idle') { if (now > train.until) { train.state = 'warn'; train.until = now + 2200; } }
+      else if (train.state === 'warn') { if (now > train.until) { train.state = 'run'; train.dir = Math.random() < 0.5 ? 1 : -1; train.x = train.dir > 0 ? -TRAIN_LEN - 1 : COLS + 1; train.until = now + 4000; } }
+      else if (train.state === 'run') { train.x += train.dir * 20 * dt; if ((train.dir > 0 && train.x > COLS + 1) || (train.dir < 0 && train.x < -TRAIN_LEN - 1)) { train.state = 'idle'; train.until = now + 11000 + Math.random() * 13000; } }
+      // continuous collision for players sitting on lanes
+      for (const c of clients.values()) checkPlayer(c);
+      // broadcast compact state
+      const off = new Array(ROWS); for (let r = 0; r < ROWS; r++) off[r] = LANES[r].type === 'road' ? +offsets[r].toFixed(2) : 0;
+      const players = []; for (const c of clients.values()) players.push([c.id, c.col, c.row]);
+      broadcast({ t: 'st', off, train: { s: train.state, x: +train.x.toFixed(2), d: train.dir }, players });
+    }, TICK);
+
+    setInterval(() => {
+      const now = Date.now();
+      for (const c of clients.values()) { if (now - c.lastSeen > 32000) { drop(c); continue; } sendRaw(c, PING); }
+    }, 12000);
+
+    server.listen(PORT, () => console.log('hoof it listening on :' + PORT));
