@@ -14,3 +14,17 @@ data:
     # keep directory redirects (e.g. /careers -> /careers/) relative so the
     # https scheme isn't downgraded behind the Cloudflare tunnel
     absolute_redirect off;
+
+    # ---- cache-control (http context; inherited by the server/location) ----
+    # Without an explicit Cache-Control, Cloudflare applies its default 4h
+    # Browser Cache TTL to static files (e.g. sw.js), which pins visitors on a
+    # stale service worker and old cached pages. Set sane values by path:
+    #   - sw.js / manifest / html  -> always revalidate (instant updates)
+    #   - images/fonts             -> cache a day (they're content-hashed by name)
+    map $uri $chill_cc {
+        default                                      "no-cache";
+        ~*^/sw\.js$                                   "no-store, must-revalidate";
+        ~*^/manifest\.json$                           "no-cache";
+        ~*\.(?:png|jpe?g|gif|svg|ico|webp|woff2?)$    "public, max-age=86400";
+    }
+    add_header Cache-Control $chill_cc always;
