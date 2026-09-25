@@ -28,6 +28,7 @@ spec:
         - harbor.racktocloud.com
         - joplin.racktocloud.com
         - k8vault.racktocloud.com
+        - clips.racktocloud.com
         policy: upsert-only
         sources:
         - ingress
