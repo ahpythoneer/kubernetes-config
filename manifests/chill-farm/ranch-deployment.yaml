@@ -29,7 +29,7 @@ spec:
         - name: PORT
           value: "8080"
         - name: OLLAMA_URL          # DGX Spark Ollama for the AI host "Sam"
-          value: "http://10.0.129.94:11434"
+          value: "http://10.0.128.110:11434"
         - name: OLLAMA_MODEL
           value: "llama3.1:8b"
         ports:

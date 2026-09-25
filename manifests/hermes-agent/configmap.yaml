@@ -49,7 +49,7 @@ data:
 
       dgx-spark:
         type: ollama
-        base_url: http://10.0.129.94:11434
+        base_url: http://10.0.128.110:11434
         default_model: hermes3:70b
         description: "Heavy inference (GB10 128GB) for complex reasoning"
         capabilities:
@@ -87,7 +87,7 @@ data:
     JOPLIN_ORIGIN = os.environ.get('JOPLIN_ORIGIN', 'joplin.racktocloud.com')
     JOPLIN_TOKEN = os.environ.get('JOPLIN_TOKEN', '')
     K8S_OLLAMA = os.environ.get('K8S_OLLAMA_URL', 'http://ollama.ollama.svc.cluster.local:11434')
-    DGX_OLLAMA = os.environ.get('DGX_OLLAMA_URL', 'http://10.0.129.94:11434')
+    DGX_OLLAMA = os.environ.get('DGX_OLLAMA_URL', 'http://10.0.128.110:11434')
     POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', '60'))
     K8S_MODEL = os.environ.get('K8S_MODEL', 'hermes3:8b-64k')
     DGX_MODEL = os.environ.get('DGX_MODEL', 'hermes3:70b')

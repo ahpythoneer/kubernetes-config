@@ -71,7 +71,7 @@ spec:
         - name: K8S_OLLAMA_URL
           value: "http://ollama.ollama.svc.cluster.local:11434"
         - name: DGX_OLLAMA_URL
-          value: "http://10.0.129.94:11434"
+          value: "http://10.0.128.110:11434"
         - name: K8S_MODEL
           value: "hermes3:8b-64k"
         - name: DGX_MODEL

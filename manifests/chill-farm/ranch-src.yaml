@@ -30,7 +30,7 @@ data:
     let nextId = 1;
 
     // ---- AI host "Sam" (DGX Spark Ollama) ----
-    const OLLAMA_URL = process.env.OLLAMA_URL || 'http://10.0.129.94:11434';
+    const OLLAMA_URL = process.env.OLLAMA_URL || 'http://10.0.128.110:11434';
     const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
     const AI_ON = !process.env.AI_OFF;
     const HOST = { id: 2000000, name: 'Sundown Sam', hue: 35, slot: 0 };
