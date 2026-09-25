@@ -32,7 +32,7 @@ data:
     ];
 
     // ---- AI catches (occasional, via DGX Spark Ollama) ----
-    const OLLAMA_URL = process.env.OLLAMA_URL || 'http://10.0.129.94:11434';
+    const OLLAMA_URL = process.env.OLLAMA_URL || 'http://10.0.128.110:11434';
     const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
     const AI_ON = !process.env.AI_OFF;
     let aiInFlight = 0, aiCalls = [];
