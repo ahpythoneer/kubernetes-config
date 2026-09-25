@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: clipdrop
+  namespace: clips
+  annotations:
+    # cert comes from certificate.yaml (DNS01), not an ingress-shim annotation
+    nginx.ingress.kubernetes.io/limit-rpm: "120"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - clips.racktocloud.com
+    secretName: clipdrop-tls
+  rules:
+  - host: clips.racktocloud.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: clipdrop
+            port:
+              number: 80

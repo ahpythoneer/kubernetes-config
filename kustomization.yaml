@@ -151,3 +151,12 @@ resources:
   - manifests/chill-farm/splash-src.yaml
   - manifests/chill-farm/splash-deployment.yaml
   - manifests/chill-farm/splash-service.yaml
+
+  # ClipDrop — clips.racktocloud.com daily Great Clips coupon board (dependency-free node, crawls once a day)
+  - manifests/clips/namespace.yaml
+  - manifests/clips/src.yaml
+  - manifests/clips/pvc.yaml
+  - manifests/clips/deployment.yaml
+  - manifests/clips/service.yaml
+  - manifests/clips/certificate.yaml
+  - manifests/clips/ingress.yaml
