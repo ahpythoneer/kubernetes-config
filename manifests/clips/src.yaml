@@ -79,6 +79,9 @@ data:
      "offer": string,                // short headline in the form "$9.99 haircut" or "$5 off a haircut"
      "scope": "national" | "local",  // national = valid at participating salons nationwide
      "markets": [{"city": string|null, "state": "two-letter US state code"}], // every metro area named, e.g. "Austin area" -> [{"city":"Austin","state":"TX"}]; "Cleveland, Akron & Canton" -> three entries; use city null ONLY when the post names a whole state or region with no city
+     "salon_name": string | null,    // only if the offer is for ONE specific salon, e.g. "Rice Hope"
+     "salon_city": string | null,    // that salon's city, e.g. "Port Wentworth"
+     "salon_state": string | null,   // that salon's two-letter state, inferred from the address if needed
      "expires": "YYYY-MM-DD" | null,
      "terms": string | null          // one sentence of important conditions, or null
     }
@@ -100,41 +103,95 @@ data:
     }
 
     // ---- geography -------------------------------------------------------------
-    let cityIndex = null;
-    function cityCentroid(city, state) {
-      if (!cityIndex) {
-        const tbl = geo._table();
-        if (!tbl) return null;
-        cityIndex = new Map();
-        for (const [zip, [lat, lon, c, st]] of Object.entries(tbl)) {
-          for (const k of [`${c}|${st}`.toLowerCase(), `*|${st}`.toLowerCase()]) {
-            const a = cityIndex.get(k) || { lat: 0, lon: 0, n: 0 };
-            a.lat += lat; a.lon += lon; a.n++; cityIndex.set(k, a);
-          }
-        }
+    // Market location is decided deterministically wherever possible: the model's
+    // guess only fills gaps, because it varies run to run (one day "Austin, TX",
+    // the next just "TX" — which matched every Texas ZIP).
+    const STATES = { AL:"Alabama",AK:"Alaska",AZ:"Arizona",AR:"Arkansas",CA:"California",CO:"Colorado",CT:"Connecticut",
+      DE:"Delaware",DC:"District of Columbia",FL:"Florida",GA:"Georgia",HI:"Hawaii",ID:"Idaho",IL:"Illinois",IN:"Indiana",
+      IA:"Iowa",KS:"Kansas",KY:"Kentucky",LA:"Louisiana",ME:"Maine",MD:"Maryland",MA:"Massachusetts",MI:"Michigan",
+      MN:"Minnesota",MS:"Mississippi",MO:"Missouri",MT:"Montana",NE:"Nebraska",NV:"Nevada",NH:"New Hampshire",
+      NJ:"New Jersey",NM:"New Mexico",NY:"New York",NC:"North Carolina",ND:"North Dakota",OH:"Ohio",OK:"Oklahoma",
+      OR:"Oregon",PA:"Pennsylvania",RI:"Rhode Island",SC:"South Carolina",SD:"South Dakota",TN:"Tennessee",TX:"Texas",
+      UT:"Utah",VT:"Vermont",VA:"Virginia",WA:"Washington",WV:"West Virginia",WI:"Wisconsin",WY:"Wyoming" };
+
+    let cityIndex = null; // "austin" -> Map(state -> {lat, lon, n})
+    function cities() {
+      if (cityIndex) return cityIndex;
+      const tbl = geo._table();
+      if (!tbl) return new Map();
+      cityIndex = new Map();
+      for (const [lat, lon, c, st] of Object.values(tbl)) {
+        const k = c.toLowerCase();
+        const byState = cityIndex.get(k) || new Map();
+        const a = byState.get(st) || { lat: 0, lon: 0, n: 0 };
+        a.lat += lat; a.lon += lon; a.n++;
+        byState.set(st, a); cityIndex.set(k, byState);
       }
-      const a = cityIndex.get(`${city || "*"}|${state}`.toLowerCase());
-      return a ? { lat: a.lat / a.n, lon: a.lon / a.n } : null;
+      return cityIndex;
     }
 
-    function locate(markets) {
+    // States a text explicitly names ("TX", "Texas", "NJ, PA & DE").
+    function statesIn(text) {
+      const out = new Set();
+      for (const [ab, name] of Object.entries(STATES)) {
+        if (new RegExp(`(^|[^A-Za-z])${ab}([^A-Za-z]|$)`).test(text) || new RegExp(`\\b${name}\\b`, "i").test(text)) out.add(ab);
+      }
+      return out;
+    }
+
+    // Place a city name. Prefer the hinted state, then a state the text names,
+    // then the state where that city name is biggest (most ZIPs).
+    function placeCity(name, hints) {
+      const clean = String(name || "").replace(/^(the\s+)?(greater|metro|northern|southern|western|eastern|central)\s+/i, "")
+        .replace(/\s+(area|metro(politan)?|region|and surrounding areas?)$/i, "").trim();
+      // "Great Clips Austin" -> try "Great Clips Austin", "Clips Austin", "Austin"
+      const words = clean.split(/\s+/);
+      let byState = null, name2 = clean;
+      for (let i = 0; i < words.length && !byState; i++) { name2 = words.slice(i).join(" "); byState = cities().get(name2.toLowerCase()); }
+      if (!byState || /^(great|clips|great clips|salon|salons)$/i.test(name2)) return null;
+      const clean2 = name2;
+      let st = hints.find(h => byState.has(h));
+      if (!st) st = [...byState.entries()].sort((a, b) => b[1].n - a[1].n)[0][0];
+      const a = byState.get(st);
+      return { city: clean2.replace(/\b\w/g, ch => ch.toUpperCase()), state: st, lat: a.lat / a.n, lon: a.lon / a.n };
+    }
+
+    // City names written the way deal posts write them: "Austin area",
+    // "participating Cleveland, Akron, Canton & Sandusky area", "Greater X", "... in Louisville."
+    function citiesIn(text) {
+      const names = [];
+      const CAP = "[A-Z][a-zA-Z.'-]+(?: [A-Z][a-zA-Z.'-]+){0,2}";
+      const lists = [...text.matchAll(new RegExp(`((?:${CAP})(?:\\s*(?:,|&|and|/|-)\\s*(?:${CAP}))*)\\s+(?:[Aa]rea|[Mm]etro)\\b`, "g"))];
+      for (const m of lists) names.push(...m[1].split(/\s*(?:,|&|\band\b|\/|-(?=[A-Z][a-z]+ [A-Z]))\s*/));
+      for (const m of text.matchAll(new RegExp(`Greater (${CAP})`, "g"))) names.push(m[1]);
+      for (const m of text.matchAll(new RegExp(` in (${CAP})(?:,\\s*([A-Z]{2}))?[.|]`, "g"))) names.push(m[1]);
+      return names.map(s => s.replace(/^(participating|select|only at|at)\s+/i, "").trim()).filter(Boolean);
+    }
+
+    // markets: model's [{city, state}] (may be junk). text: the post text.
+    // salonCity/salonState: set for single-salon offers.
+    function locate(markets, text, salon) {
+      const named = statesIn(text);
+      const hints = [...(salon && salon.state ? [salon.state] : []),
+        ...(markets || []).map(m => String(m.state || "").toUpperCase().trim()).filter(s => STATES[s]), ...named];
       const out = [];
+      const add = (l, extra) => { if (l && !out.some(o => o.city === l.city && o.state === l.state)) out.push(Object.assign(l, extra)); };
+
+      if (salon && salon.city) add(placeCity(salon.city, hints), { salon: salon.name || null });
+      if (!out.length) {
+        for (const n of citiesIn(text)) add(placeCity(n, hints));
+        for (const m of markets || []) if (m.city) add(placeCity(m.city, hints));
+      }
+      // A post that names its states ("Select NJ, PA & DE") can't have cities elsewhere:
+      // drop placements like "Fort Worth" -> "Worth, IL".
+      if (named.size) for (let i = out.length - 1; i >= 0; i--) if (!out[i].salon && !named.has(out[i].state)) out.splice(i, 1);
+      // Whole-state markets only when the post itself names the state and we
+      // found no city in it; a model-invented state is never enough.
       for (const m of markets || []) {
         const st = String(m.state || "").toUpperCase().trim();
-        if (!/^[A-Z]{2}$/.test(st) || st === "US") continue;
-        const city = m.city && String(m.city).replace(/^(greater|metro)\s+|\s+(area|metro(politan)?|region)$/gi, "").trim();
-        const c = city ? cityCentroid(city, st) : null;
-        if (c) out.push({ city, state: st, lat: c.lat, lon: c.lon });
-        else out.push({ city: null, state: st }); // whole state (or city we couldn't place)
+        if (!m.city && STATES[st] && named.has(st) && !out.some(o => o.state === st)) out.push({ city: null, state: st });
       }
-      // A state-wide entry is redundant when we placed a city in that state.
-      const placed = new Set(out.filter(l => l.city).map(l => l.state));
-      const seen = new Set();
-      return out.filter(l => {
-        const k = (l.city || "*") + l.state;
-        if (seen.has(k) || (!l.city && placed.has(l.state))) return false;
-        seen.add(k); return true;
-      });
+      return out;
     }
 
     // ---- sources ---------------------------------------------------------------
@@ -173,6 +230,53 @@ data:
         const links = [...new Set([...h.matchAll(/https?:\/\/offers\.greatclips\.com\/([A-Za-z0-9]{5,10})/g)].map(m => m[0]))];
         posts.push({ source: "Slickdeals", url, title, body, posted: dm ? dm[1] : new Date(mod).toISOString().slice(0, 10), couponUrl: links[0] || null });
       }
+      return posts;
+    }
+
+    // greatclips.coupons (robots.txt: allow all). Its price pages paste the text of
+    // individual offers.greatclips.com coupons, one block per link — usually a
+    // single salon ("$4.99 at Great Clips Rice Hope at 7934 GA Hwy 21 in Port
+    // Wentworth.") or a market ("...participating Phoenix area salons"). No expiry
+    // is shown and we don't fetch offers.greatclips.com, so these stay "unverified".
+    async function greatclipsCoupons(log) {
+      const base = "https://www.greatclips.coupons";
+      const sm = await get(base + "/post-sitemap.xml");
+      const pages = [...sm.matchAll(/<loc>([^<]+)<\/loc>\s*(?:<lastmod>([^<]+)<\/lastmod>)?/g)]
+        .map(m => ({ url: m[1], mod: m[2] ? m[2].slice(0, 10) : null }))
+        .filter(p => /clips|\d+-\d+|off|coupon/i.test(p.url) && !/uber|subway|doordash|shein|canada/i.test(p.url));
+      const posts = [], seenIds = new Set();
+      for (const p of pages) {
+        await sleep(DELAY_MS);
+        let h;
+        try { h = await get(p.url); } catch (e) { log(`  skip ${p.url}: ${e.message}`); continue; }
+        // Text with a marker at each offer link, then split: each block is the text
+        // leading up to its link.
+        // Links appear both as <a href> and as bare URLs in the text; mark both.
+        const marked = h.replace(/<a[^>]+href="https?:\/\/offers\.greatclips\.com\/([A-Za-z0-9]+)[^"]*"[^>]*>/g, " \u0001$1\u0002 ");
+        const t = text(marked).replace(/(?:https?:\/\/)?offers\.greatclips\.com\/([A-Za-z0-9]+)\/?/g, " \u0001$1\u0002 ");
+        const parts = t.split(/\u0001([A-Za-z0-9]+)\u0002/).map((x, i) => i % 2 ? "https://offers.greatclips.com/" + x : x);
+        for (let i = 1; i < parts.length; i += 2) {
+          const link = parts[i], id = link.split("/").pop();
+          if (seenIds.has(id)) continue;
+          seenIds.add(id);
+          let block = parts[i - 1].slice(-700).replace(/\b(SAVE|Print (code|coupon)|GET CODE)\b/gi, " ").replace(/\s+/g, " ").trim();
+          if (!/\$\s?\d/.test(block)) {
+            // Salon-only rows ("Wolf Pen Plaza at 1901 Texas Ave S in College Station")
+            // take their price from the nearest heading above them on the page.
+            const before = parts.slice(0, i).filter((_, j) => j % 2 === 0).join(" ");
+            const heads = [...before.matchAll(/[^.|!]{0,80}\$\s?\d+(?:\.\d{2})?(?:\s*off)?/gi)];
+            if (!heads.length) continue;
+            block = `Price on page: ${heads[heads.length - 1][0].trim()}. Salon: ${block.slice(-250)}`;
+          }
+          // "<Salon> at <street> in <City>[, ST]." at the end of the block names the salon's city.
+          const sm2 = block.match(/(?:Great Clips\s+)?([A-Z][\w'&.-]*(?:\s+[A-Z0-9][\w'&.-]*){0,5}) at \d[^|]*? in ([A-Z][a-zA-Z.'-]+(?:\s[A-Z][a-zA-Z.'-]+){0,2})(?:,\s*([A-Z]{2}))?[.,]?\s*$/);
+          const salonHint = sm2 ? { name: sm2[1].replace(/^(Salon:|SAVE|[A-Z]{3,9}\s+\d{4})\s*/i, "").trim(),
+            city: sm2[2].replace(/[.,]+$/, ""), state: sm2[3] || null } : null;
+          posts.push({ source: "greatclips.coupons", url: p.url, title: block.slice(-160), body: block, salonHint,
+            posted: p.mod || new Date().toISOString().slice(0, 10), couponUrl: link, unverified: true });
+        }
+      }
+      log(`greatclips.coupons: ${pages.length} pages, ${posts.length} coupon links`);
       return posts;
     }
 
@@ -229,6 +333,8 @@ data:
         let posts = [];
         try { const p = await slickdealsThreads(log); posts.push(...p); report.sources.slickdeals = { ok: true, posts: p.length }; }
         catch (e) { log("slickdeals failed: " + e.message); report.sources.slickdeals = { ok: false, error: e.message }; }
+        try { const p = await greatclipsCoupons(log); posts.push(...p); report.sources.greatclipsCoupons = { ok: true, links: p.length }; }
+        catch (e) { log("greatclips.coupons failed: " + e.message); report.sources.greatclipsCoupons = { ok: false, error: e.message }; }
         try {
           const g = await greatclipsPromos(log);
           for (const p of g.perks) upsert({ id: p.key, scope: "national", evergreen: true, source: "greatclips.com", url: p.url,
@@ -246,19 +352,28 @@ data:
           const ref = new Date((post.posted || now.slice(0, 10)) + "T12:00:00Z");
           const all = post.title + " " + post.body;
           if (NATIONAL.test(all) || (x.markets || []).some(m => /^(US|USA)$/i.test(String(m.state || "")))) x.scope = "national";
+          // Coupon-list sites: nationwide only when the text says so (the model
+          // over-guesses it), and the email sign-up perk is already an evergreen card.
+          if (post.unverified && x.scope === "national" && !NATIONAL.test(all)) x.scope = "local";
+          if (post.unverified && /mailing list|email list|sign[- ]?up/i.test(all) && /\$\s?2\b/.test(all)) { log(`  skip sign-up perk dup`); continue; }
           const exp = parseExpiry(post.title + " " + post.body, ref) || (/^\d{4}-\d{2}-\d{2}$/.test(x.expires || "") ? x.expires : null);
-          const locs = x.scope === "national" ? [] : locate(x.markets);
-          if (x.scope !== "national" && !locs.length) { log(`  no market for: ${post.title}`); continue; }
+          const h = post.salonHint;
+          const salon = h ? { name: h.name, city: h.city, state: (h.state || String(x.salon_state || "")).toUpperCase() }
+            : x.salon_city ? { name: x.salon_name || null, city: x.salon_city, state: String(x.salon_state || "").toUpperCase() } : null;
+          const locs = x.scope === "national" ? [] : locate(x.markets, all, salon);
+          if (x.scope !== "national" && !locs.length) { log(`  no market for: ${post.title.slice(0, 90)}`); continue; }
           const key = post.couponUrl || `${x.offer}|${locs.map(l => l.city + l.state).join(",")}|${exp}`;
+          const id = crypto.createHash("sha1").update(key).digest("hex").slice(0, 12);
+          if (seen.has(id)) continue; // same coupon link already taken from a better source this run
           upsert({
-            id: crypto.createHash("sha1").update(key).digest("hex").slice(0, 12),
+            id,
             scope: x.scope === "national" ? "national" : "local",
             offer: offerText(x.offer, post), title: post.title.slice(0, 140),
             terms: x.terms ? String(x.terms).slice(0, 300) : null, expires: exp, posted: post.posted,
             source: post.source, url: post.couponUrl || post.url, thread: post.url, locs,
-            confidence: report.llm ? 0.9 : 0.5,
+            unverified: !!post.unverified, confidence: post.unverified ? 0.5 : report.llm ? 0.9 : 0.6,
           });
-          log(`  + ${x.scope} ${x.offer} ${locs.map(l => (l.city || "*") + "," + l.state).join(" ")} exp=${exp}`);
+          log(`  + ${x.scope} ${offerText(x.offer, post)} ${locs.map(l => (l.city || "*") + "," + l.state + (l.salon ? " [" + l.salon + "]" : "")).join(" ")} exp=${exp}${post.unverified ? " (unverified)" : ""}`);
         }
         // Standing perks that vanished from the official page are dropped.
         for (const [id, c] of Object.entries(db.coupons)) if (c.evergreen && !seen.has(id) && report.sources.greatclips?.ok) delete db.coupons[id];
@@ -276,7 +391,7 @@ data:
       return lines;
     }
 
-    module.exports = { run, running, parseExpiry };
+    module.exports = { run, running, parseExpiry, locate, citiesIn };
   geo.js: |
     "use strict";
     // ZIP -> {lat, lon, city, state} from the GeoNames US postal code dump
@@ -401,6 +516,7 @@ data:
     .tag{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
     .tag.hot{border-color:transparent;background:var(--accent);color:#fff}
     .tag.soon{color:var(--warn);border-color:currentColor}
+    .tag.unv{border-style:dashed}
     .perf{position:relative;height:0;border-top:2px dashed var(--line);margin:0 12px}
     .perf::before,.perf::after{content:"";position:absolute;top:-11px;width:20px;height:20px;border-radius:50%;
       background:var(--bg);border:1px solid var(--line)}
@@ -450,6 +566,12 @@ data:
         <div id="local" class="grid"></div>
       </section>
 
+      <section id="stateSec" hidden>
+        <h2><span id="stateHead">Elsewhere in your state</span><span id="stateCount"></span></h2>
+        <p class="small" style="margin:-4px 0 12px">These deals are valid at select salons across the state, but the coupon doesn't say which ones. Check the terms before you go.</p>
+        <div id="state" class="grid"></div>
+      </section>
+
       <section id="natSec">
         <h2><span>Good anywhere</span><span id="natCount"></span></h2>
         <div id="national" class="grid"><div class="skel"></div><div class="skel"></div></div>
@@ -492,10 +614,11 @@ data:
       var tags=el("div","tags");
       var dl=daysLeft(c.expires);
       if(dl!=null) tags.appendChild(el("span","tag"+(dl<=3?" soon":""), dl<=0?"ends today":dl===1?"ends tomorrow":"ends in "+dl+" days"));
-      else if(!c.evergreen) tags.appendChild(el("span","tag","posted "+nice(c.posted)));
+      else if(!c.evergreen) tags.appendChild(el("span","tag",(c.unverified?"listed ":"posted ")+nice(c.posted)));
       if(c.miles!=null) tags.appendChild(el("span","tag",c.miles+" mi · "+c.place));
       else if(c.markets && c.markets.length) tags.appendChild(el("span","tag",c.markets.slice(0,3).join(" · ")));
       if(c.scope==="national" && !c.evergreen) tags.appendChild(el("span","tag","nationwide"));
+      if(c.unverified){ var u=el("span","tag unv","unverified"); u.title="Listed by a coupon site with no end date. It may have expired, so check the coupon page and tap Worked or Didn't work."; tags.appendChild(u); }
       if(!c.evergreen && Date.now()-Date.parse(c.firstSeen)<36e5*30) tags.appendChild(el("span","tag hot","new today"));
       top.appendChild(tags);
       if(c.terms){ var d=el("details","terms"); d.appendChild(el("summary",null,"Fine print")); d.appendChild(el("p",null,c.terms)); top.appendChild(d); }
@@ -548,11 +671,13 @@ data:
         fill($("national"), d.national, $("natCount"));
         if(!d.national.length) empty($("national"), function(e){ e.textContent="No nationwide coupons right now. Most Great Clips deals are local to one area, so search your ZIP above."; });
         fill($("always"), d.always, {textContent:""}); $("alwaysSec").hidden=!d.always.length;
+        $("stateSec").hidden=true;
         if(!q){ $("localSec").hidden=true; return; }
         $("localSec").hidden=false;
         if(d.unknownZip){ $("localHead").textContent="Near you"; $("localCount").textContent=""; empty($("local"),function(e){ e.textContent="We don't recognize that ZIP code. Please check it and try again."; }); return; }
         $("localHead").textContent="Near "+d.where.city+", "+d.where.state;
         fill($("local"), d.local, $("localCount"));
+        if(d.state && d.state.length){ $("stateSec").hidden=false; $("stateHead").textContent="Elsewhere in "+d.where.state; fill($("state"), d.state, $("stateCount")); }
         if(!d.local.length){
           empty($("local"), function(e){
             e.appendChild(el("strong",null,"No local coupons within "+d.radius+" mi right now. "));
@@ -637,31 +762,38 @@ data:
     // ---- helpers ---------------------------------------------------------------
     const today = () => new Date().toISOString().slice(0, 10);
 
-    const NO_DATE_DAYS = 21; // an undated post is assumed stale after this long
+    const NO_DATE_DAYS = 21;        // an undated forum post is assumed stale after this long
+    const NO_DATE_DAYS_LISTED = 45; // coupon-list sites re-list offers less often
 
     function isLive(c) {
       const v = store.db().votes[c.id];
       if (v && v.expired >= 3 && v.expired > v.worked * 2) return false; // visitors say it's dead
       if (Date.now() - Date.parse(c.lastSeen) > 3 * 86400e3) return false; // gone from the source
       if (c.expires) return c.expires >= today();
-      return c.evergreen || Date.now() - Date.parse(c.posted + "T12:00:00Z") < NO_DATE_DAYS * 86400e3;
+      const days = c.unverified ? NO_DATE_DAYS_LISTED : NO_DATE_DAYS;
+      return c.evergreen || Date.now() - Date.parse(c.posted + "T12:00:00Z") < days * 86400e3;
     }
 
-    // How close a visitor is to a coupon's market: a city market reaches ~50 mi
-    // around the city centre; a state-wide market covers the whole state.
-    const CITY_REACH_MI = 50;
+    // A metro market ("Austin area") covers roughly this far around the city
+    // centre; a single-salon offer only its neighbourhood. A visitor matches when
+    // (distance to centre - reach) is within their chosen radius.
+    const METRO_REACH_MI = 25, SALON_REACH_MI = 10;
     function nearest(c, where, radius) {
       let best = null;
       for (const l of c.locs || []) {
-        if (l.lat != null) {
-          const mi = geo.miles(where, l);
-          if (mi <= radius + CITY_REACH_MI && (!best || mi < best.miles))
-            best = { miles: Math.round(mi), place: `${l.city}, ${l.state}` };
-        } else if (l.state === where.state && (!best || best.miles > 0)) {
-          best = { miles: 0, place: `all of ${l.state}` };
-        }
+        if (l.lat == null) continue;
+        const mi = geo.miles(where, l);
+        const reach = l.salon ? SALON_REACH_MI : METRO_REACH_MI;
+        if (mi - reach <= radius && (!best || mi < best.miles))
+          best = { miles: Math.round(mi), place: l.salon ? `${l.salon}, ${l.city}, ${l.state}` : `${l.city} area, ${l.state}` };
       }
       return best;
+    }
+
+    // State-only markets ("Select NJ, PA & DE locations") can't be placed on a map,
+    // so they are listed separately for visitors in that state, never as "0 mi".
+    function statewide(c, where) {
+      return (c.locs || []).some(l => l.lat == null && l.state === where.state);
     }
 
     function publicCoupon(c, near) {
@@ -670,9 +802,9 @@ data:
         id: c.id, title: c.title, offer: c.offer, terms: c.terms || null,
         expires: c.expires || null, scope: c.scope, evergreen: !!c.evergreen, source: c.source,
         url: c.url, thread: c.thread && c.thread !== c.url ? c.thread : null,
-        markets: (c.locs || []).map(l => l.city ? `${l.city}, ${l.state}` : l.state),
+        markets: (c.locs || []).map(l => l.salon ? `${l.salon}, ${l.city}, ${l.state}` : l.city ? `${l.city} area, ${l.state}` : `select ${l.state} salons`),
         miles: near ? near.miles : null, place: near ? near.place : null,
-        posted: c.posted, firstSeen: c.firstSeen, votes: v,
+        posted: c.posted, firstSeen: c.firstSeen, votes: v, unverified: !!c.unverified,
       };
     }
 
@@ -718,18 +850,20 @@ data:
         const byNew = (a, b) => (b.posted || "").localeCompare(a.posted || "");
         const national = live.filter(c => c.scope === "national" && !c.evergreen).map(c => publicCoupon(c)).sort(byNew);
         const always = live.filter(c => c.evergreen).map(c => publicCoupon(c));
-        let local = [];
+        let local = [], state = [];
         if (where) {
-          local = live.filter(c => c.scope === "local")
-            .map(c => { const n = nearest(c, where, radius); return n && publicCoupon(c, n); })
-            .filter(Boolean).sort((a, b) => a.miles - b.miles || byNew(a, b));
+          const locals = live.filter(c => c.scope === "local");
+          local = locals.map(c => { const n = nearest(c, where, radius); return n && publicCoupon(c, n); })
+            .filter(Boolean).sort((a, b) => (a.unverified - b.unverified) || a.miles - b.miles || byNew(a, b));
+          const near = new Set(local.map(c => c.id));
+          state = locals.filter(c => !near.has(c.id) && statewide(c, where)).map(c => publicCoupon(c)).sort(byNew);
         }
         // Other markets with live deals right now: shown as a teaser when nothing is local.
         const elsewhere = [...new Set(live.filter(c => c.scope === "local")
-          .flatMap(c => (c.locs || []).map(l => l.city ? `${l.city}, ${l.state}` : l.state)))].slice(0, 12);
+          .flatMap(c => (c.locs || []).map(l => l.city ? `${l.city}, ${l.state}` : l.state)))].sort().slice(0, 20);
         const last = db.crawls[db.crawls.length - 1] || null;
         return send(res, 200, {
-          where, radius, local, national, always, elsewhere,
+          where, radius, local, state, national, always, elsewhere,
           unknownZip: !!zip && !where,
           lastCrawl: last && { at: last.at, found: last.found },
         });
