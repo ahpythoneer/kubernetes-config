@@ -629,6 +629,59 @@ data:
     .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);
       padding:10px 16px;border-radius:12px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
     .toast.on{opacity:1}
+
+    /* ---- Drop Map ---- */
+    :root{ --land:#e9e3d6; --land-line:#f6f4ef; --pin:#0f766e; --pin-new:#f5b301; --pin-soon:#e8572a; --cut:#1c1b19; }
+    @media (prefers-color-scheme: dark){ :root{ --land:#2a2722; --land-line:#12110f; --pin:#2dd4bf; --pin-new:#fcd34d; --pin-soon:#fb7c52; --cut:#f1ede4; } }
+    .mapwrap{position:relative;margin:26px 0 8px;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden}
+    .maphead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px 0}
+    .maphead h2{margin:0;font-size:14px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+    .maptools{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{font:inherit;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:6px 12px;cursor:pointer}
+    .chip:hover{border-color:var(--ink)}
+    #map{display:block;width:100%;height:auto;aspect-ratio:975/610;touch-action:manipulation;user-select:none}
+    #map .st{fill:var(--land);stroke:var(--land-line);stroke-width:1;vector-effect:non-scaling-stroke;transition:fill .3s;cursor:pointer}
+    #map .st:hover{filter:brightness(.96)}
+    #map .pin{cursor:pointer}
+    #map .pin .body{fill:var(--pin);stroke:var(--card);stroke-width:1.5}
+    #map .pin.new .body{fill:var(--pin-new)}
+    #map .pin.soon .body{fill:var(--pin-soon)}
+    #map .pin .snip{stroke:var(--card);stroke-width:1.4;fill:none;stroke-linecap:round}
+    #map .pin .cnt{font:800 9px system-ui,sans-serif;fill:var(--card);text-anchor:middle}
+    #map .pin .ring{fill:none;stroke:var(--pin-soon);stroke-width:2;opacity:0}
+    #map .pin.soon .ring{animation:ring 1.8s ease-out infinite}
+    #map .pin:hover .body,#map .pin.sel .body{stroke:var(--ink);stroke-width:2}
+    #map .drop{animation:drop .7s cubic-bezier(.3,1.4,.5,1) both}
+    @keyframes drop{0%{transform:translateY(-140px);opacity:0}55%{opacity:1}100%{transform:none;opacity:1}}
+    @keyframes ring{0%{r:6;opacity:.9}100%{r:22;opacity:0}}
+    #map .you circle.dot{fill:var(--accent);stroke:var(--card);stroke-width:2}
+    #map .you circle.halo{fill:var(--accent);opacity:.25;animation:halo 2s ease-out infinite}
+    @keyframes halo{0%{r:6;opacity:.35}100%{r:26;opacity:0}}
+    #map .you text{font:800 10px system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--card);stroke-width:3px}
+    #map .city circle{fill:var(--muted)}
+    #map .city text{font:600 11px system-ui,sans-serif;fill:var(--muted);paint-order:stroke;stroke:var(--land);stroke-width:3px}
+    #map .radius{fill:var(--accent);fill-opacity:.06;stroke:var(--accent);stroke-opacity:.6;stroke-width:1.5;stroke-dasharray:4 4;vector-effect:non-scaling-stroke}
+    #map .rlabel{font-weight:800;fill:var(--accent);paint-order:stroke;stroke:var(--card);stroke-width:.25em}
+    #map .cut{fill:none;stroke:var(--cut);stroke-width:2;stroke-dasharray:6 5;vector-effect:non-scaling-stroke}
+    #map .scissors .blade{stroke:var(--cut);stroke-width:1.6;stroke-linecap:round}
+    #map .scissors .handle{fill:none;stroke:var(--accent);stroke-width:1.6}
+    .ticker{display:flex;gap:18px;overflow-x:auto;white-space:nowrap;padding:10px 16px;border-top:1px dashed var(--line);font-size:13px;color:var(--muted);scrollbar-width:none}
+    .ticker b{color:var(--ink)}
+    .legend{display:flex;gap:12px;flex-wrap:wrap;padding:6px 16px 0;font-size:12px;color:var(--muted)}
+    .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+    .pop{position:absolute;z-index:5;width:250px;max-width:calc(100% - 24px);background:var(--card);border:1px solid var(--line);border-radius:14px;
+      box-shadow:0 14px 40px -12px rgba(0,0,0,.45);padding:12px 14px;transform:translate(-50%,calc(-100% - 18px));pointer-events:auto}
+    .pop::after{content:"";position:absolute;left:50%;bottom:-7px;width:12px;height:12px;background:var(--card);border-right:1px solid var(--line);border-bottom:1px solid var(--line);transform:translateX(-50%) rotate(45deg)}
+    .pop.sheet{position:relative;left:auto;top:auto;width:auto;max-width:none;transform:none;margin:4px 12px 12px;box-shadow:none}
+    .pop.sheet::after{display:none}
+    .pop .po{font-size:20px;font-weight:800;letter-spacing:-.02em;margin:0}
+    .pop .pp{font-size:13px;color:var(--muted);margin:2px 0 8px}
+    .pop .row{justify-content:space-between}
+    .pop .x{position:absolute;top:6px;right:8px;background:none;border:0;color:var(--muted);font-size:16px;cursor:pointer}
+    .pop .more{font-size:12px;color:var(--muted);margin:8px 0 0}
+    .flash{animation:flash 1.4s ease-out}
+    @keyframes flash{0%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:var(--shadow)}}
+    @media (prefers-reduced-motion:reduce){#map .drop,#map .pin.soon .ring,#map .you circle.halo{animation:none}}
     </style>
     </head>
     <body>
@@ -647,6 +700,21 @@ data:
           <button class="btn">Find deals</button>
         </form>
         <div class="meta" id="meta"></div>
+      </div>
+
+      <div class="mapwrap" id="mapwrap">
+        <div class="maphead">
+          <h2>The Drop Map</h2>
+          <div class="maptools">
+            <button class="chip" id="snippy" type="button">✂ Feeling snippy?</button>
+            <button class="chip" id="usa" type="button" hidden>⤢ Whole USA</button>
+          </div>
+        </div>
+        <div class="legend" aria-hidden="true"><span><i style="background:var(--pin-new)"></i>new today</span><span><i style="background:var(--pin-soon)"></i>ends within 3 days</span><span><i style="background:var(--pin)"></i>live deal</span></div>
+        <svg id="map" viewBox="0 0 975 610" role="img" aria-label="Map of live Great Clips coupons across the US">
+          <g id="lStates"></g><g id="lCities"></g><g id="lCut"></g><g id="lPins"></g><g id="lYou"></g><g id="lSnip"></g>
+        </svg>
+        <div class="ticker" id="ticker" aria-live="polite"></div>
       </div>
 
       <section id="localSec" hidden>
@@ -695,7 +763,7 @@ data:
     function host(u){ try{ return new URL(u).hostname.replace(/^www\./,""); }catch(e){ return "source"; } }
 
     function ticket(c){
-      var t=el("article","ticket");
+      var t=el("article","ticket"); t.dataset.id=c.id;
       var top=el("div","top");
       top.appendChild(el("p","offer",c.offer||c.title));
       if(c.offer && c.title && c.title!==c.offer) top.appendChild(el("p","title",c.title));
@@ -765,6 +833,7 @@ data:
         $("localSec").hidden=false;
         if(d.unknownZip){ $("localHead").textContent="Near you"; $("localCount").textContent=""; empty($("local"),function(e){ e.textContent="We don't recognize that ZIP code. Please check it and try again."; }); return; }
         $("localHead").textContent="Near "+d.where.city+", "+d.where.state;
+        if(window.ClipMap) window.ClipMap.focus(d.where, d.local);
         fill($("local"), d.local, $("localCount"));
         if(d.state && d.state.length){ $("stateSec").hidden=false; $("stateHead").textContent="Elsewhere in "+d.where.state; fill($("state"), d.state, $("stateCount")); }
         if(!d.local.length){
@@ -781,6 +850,239 @@ data:
     var z=store.get("zip"); if(z) $("zip").value=z;
     var r=store.get("radius"); if(r) $("radius").value=r;
     load();
+    })();
+    </script>
+
+    <script src="/vendor/d3-array.min.js"></script>
+    <script src="/vendor/d3-geo.min.js"></script>
+    <script src="/vendor/topojson-client.min.js"></script>
+    <script>
+    (function(){
+    "use strict";
+    if(!window.d3 || !window.topojson) return;           // map is a bonus; the list works without it
+    var NS="http://www.w3.org/2000/svg", svg=document.getElementById("map");
+    var W=975, H=610, view=[0,0,W,H], pins=[], groups=[], you=null, openPop=null, ringLabel=null, cityEls=[];
+    // A few big metros for orientation when zoomed in.
+    var CITIES=[["New York",40.71,-74.0],["Los Angeles",34.05,-118.24],["Chicago",41.88,-87.63],["Houston",29.76,-95.37],["Phoenix",33.45,-112.07],["Philadelphia",39.95,-75.17],["San Antonio",29.42,-98.49],["San Diego",32.72,-117.16],["Dallas",32.78,-96.8],["Austin",30.27,-97.74],["Jacksonville",30.33,-81.66],["Fort Worth",32.76,-97.33],["Columbus",39.96,-83.0],["Charlotte",35.23,-80.84],["Indianapolis",39.77,-86.16],["San Francisco",37.77,-122.42],["Seattle",47.61,-122.33],["Denver",39.74,-104.99],["Nashville",36.16,-86.78],["Oklahoma City",35.47,-97.52],["El Paso",31.76,-106.49],["Boston",42.36,-71.06],["Portland",45.52,-122.68],["Las Vegas",36.17,-115.14],["Detroit",42.33,-83.05],["Memphis",35.15,-90.05],["Louisville",38.25,-85.76],["Baltimore",39.29,-76.61],["Milwaukee",43.04,-87.91],["Albuquerque",35.08,-106.65],["Tucson",32.22,-110.97],["Kansas City",39.1,-94.58],["Atlanta",33.75,-84.39],["Omaha",41.26,-95.93],["Miami",25.76,-80.19],["Minneapolis",44.98,-93.27],["Tulsa",36.15,-95.99],["Cleveland",41.5,-81.69],["Tampa",27.95,-82.46],["Orlando",28.54,-81.38],["New Orleans",29.95,-90.07],["St. Louis",38.63,-90.2],["Pittsburgh",40.44,-80.0],["Cincinnati",39.1,-84.51],["Salt Lake City",40.76,-111.89],["Corpus Christi",27.8,-97.4],["Waco",31.55,-97.15],["Ocala",29.19,-82.14],["Des Moines",41.59,-93.62],["Boise",43.62,-116.2],["Raleigh",35.78,-78.64],["Richmond",37.54,-77.44],["Sacramento",38.58,-121.49],["Birmingham",33.52,-86.8]];
+    var reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // us-atlas "states-albers-10m" is pre-projected with exactly this projection.
+    var proj=d3.geoAlbersUsa().scale(1300).translate([487.5,305]);
+    var ABBR={AL:"Alabama",AK:"Alaska",AZ:"Arizona",AR:"Arkansas",CA:"California",CO:"Colorado",CT:"Connecticut",DE:"Delaware",DC:"District of Columbia",FL:"Florida",GA:"Georgia",HI:"Hawaii",ID:"Idaho",IL:"Illinois",IN:"Indiana",IA:"Iowa",KS:"Kansas",KY:"Kentucky",LA:"Louisiana",ME:"Maine",MD:"Maryland",MA:"Massachusetts",MI:"Michigan",MN:"Minnesota",MS:"Mississippi",MO:"Missouri",MT:"Montana",NE:"Nebraska",NV:"Nevada",NH:"New Hampshire",NJ:"New Jersey",NM:"New Mexico",NY:"New York",NC:"North Carolina",ND:"North Dakota",OH:"Ohio",OK:"Oklahoma",OR:"Oregon",PA:"Pennsylvania",RI:"Rhode Island",SC:"South Carolina",SD:"South Dakota",TN:"Tennessee",TX:"Texas",UT:"Utah",VT:"Vermont",VA:"Virginia",WA:"Washington",WV:"West Virginia",WI:"Wisconsin",WY:"Wyoming"};
+
+    function mk(tag, attrs, parent){ var e=document.createElementNS(NS,tag); for(var k in attrs) e.setAttribute(k,attrs[k]); if(parent) parent.appendChild(e); return e; }
+    function days(d){ return d? Math.ceil((Date.parse(d+"T23:59:59")-Date.now())/864e5) : null; }
+    function endsTxt(d){ var n=days(d); return n==null? "no fixed end date" : n<=0? "ends today" : n===1? "ends tomorrow" : "ends in "+n+" days"; }
+    function ease(t){ return t<.5? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
+    // SVG units per screen pixel, so pins stay the same on-screen size at any zoom.
+    function k(){ return view[2]/Math.max(1, svg.clientWidth); }
+
+    function setView(v){ view=v; svg.setAttribute("viewBox", v.join(" ")); var s=k()*1.15;
+      var zoomed=v[2]<520, kk=k(), kept=[];
+      cityEls.forEach(function(c){
+        var sx=(c._x-v[0])/kk, sy=(c._y-v[1])/kk, inView=sx>-10&&sy>-10&&sx<v[2]/kk+10&&sy<v[3]/kk+10;
+        var ok=zoomed&&inView&&kept.every(function(q){ return Math.abs(q[0]-sx)>95||Math.abs(q[1]-sy)>18; });
+        if(ok&&you){ var ux=(you._x-v[0])/kk, uy=(you._y-v[1])/kk; if(Math.abs(ux-sx)<110&&Math.abs(uy+14-sy)<22) ok=false; }
+        c.style.display=ok?"":"none";
+        if(ok){ kept.push([sx,sy]); c.setAttribute("transform","translate("+c._x+","+c._y+") scale("+kk+")"); }
+      });
+      if(ringLabel) ringLabel.setAttribute("font-size", 12*k()); groups.forEach(function(g){ g.el.setAttribute("transform","translate("+g.x+","+g.y+") scale("+s+")"); }); if(you) you.setAttribute("transform","translate("+you._x+","+you._y+") scale("+s+")"); placePop(); }
+    function zoomTo(target, ms){
+      var from=view.slice(), t0=performance.now(); ms=reduce?0:(ms||900);
+      return new Promise(function(done){
+        (function step(now){ var t=ms? Math.min(1,(now-t0)/ms) : 1, e=ease(t);
+          setView(from.map(function(v,i){ return v+(target[i]-v)*e; }));
+          if(t<1) requestAnimationFrame(step); else done(); })(performance.now());
+      });
+    }
+    function fit(x0,y0,x1,y1,pad,minW){
+      pad=pad==null?60:pad; minW=minW||140;
+      var w=Math.max(x1-x0,minW)+pad*2, h=Math.max(y1-y0,minW*.62)+pad*2, cx=(x0+x1)/2, cy=(y0+y1)/2;
+      if(w/h > W/H) h=w*H/W; else w=h*W/H;
+      if(w>W){ return [0,0,W,H]; }
+      return [cx-w/2, cy-h/2, w, h];
+    }
+
+    // ---- pins ----
+    function pinEl(g, i){
+      var cls="pin"+(g.soon?" soon":g.isNew?" new":"");
+      var outer=mk("g",{"class":cls,tabindex:"0",role:"button","aria-label":g.label}, document.getElementById("lPins"));
+      var inner=mk("g",{"class":reduce?"":"drop",style:"animation-delay:"+(300+i*70)+"ms"}, outer);
+      mk("circle",{"class":"ring",cx:0,cy:-16,r:6}, inner);
+      mk("path",{"class":"body",d:"M0 0 C-2 -5 -10 -9 -10 -17 A10 10 0 1 1 10 -17 C10 -9 2 -5 0 0Z"}, inner);
+      if(g.items.length>1){ var t=mk("text",{"class":"cnt",x:0,y:-13.5}, inner); t.textContent=g.items.length; }
+      else { // tiny scissors
+        mk("circle",{"class":"snip",cx:-3.2,cy:-13,r:2}, inner); mk("circle",{"class":"snip",cx:3.2,cy:-13,r:2}, inner);
+        mk("path",{"class":"snip",d:"M-2 -14.6 L4 -22 M2 -14.6 L-4 -22"}, inner);
+      }
+      outer.addEventListener("click", function(ev){ ev.stopPropagation(); show(g); });
+      outer.addEventListener("keydown", function(ev){ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); show(g); } });
+      return outer;
+    }
+
+    function build(data){
+      // group pins in the same city/salon spot
+      var by={};
+      data.pins.forEach(function(p){ var xy=proj([p.lon,p.lat]); if(!xy) return;
+        var key=Math.round(xy[0]/6)+","+Math.round(xy[1]/6);
+        (by[key]=by[key]||{x:xy[0],y:xy[1],items:[]}).items.push(p); });
+      groups=Object.keys(by).map(function(k){ var g=by[k];
+        g.isNew=g.items.some(function(p){return p.isNew;});
+        g.soon=g.items.some(function(p){ var n=days(p.expires); return n!=null && n<=3; });
+        g.label=g.items.length+" deal"+(g.items.length>1?"s":"")+" in "+g.items[0].city+", "+g.items[0].state;
+        return g; }).sort(function(a,b){ return a.x-b.x; });            // drop west to east
+      groups.forEach(function(g,i){ g.el=pinEl(g,i); });
+      // tint states by live deal count
+      document.querySelectorAll("#map .st").forEach(function(el){
+        var n=data.states[el.dataset.ab]||0;
+        if(n) el.style.fill="color-mix(in srgb, var(--pin) "+Math.min(12+n*9,48)+"%, var(--land))";
+      });
+      setView(view);
+      ticker(data);
+    }
+
+    function ticker(d){
+      var t=document.getElementById("ticker"), s=d.stats, bits=[];
+      bits.push("<b>"+s.deals+"</b> live deal"+(s.deals===1?"":"s")+" in <b>"+s.places+"</b> places");
+      if(s.cheapest) bits.push("cheapest <b>$"+s.cheapest.price.toFixed(2)+"</b> in "+s.cheapest.city+", "+s.cheapest.state);
+      if(s.newToday) bits.push("<b>"+s.newToday+"</b> new today");
+      if(s.endingSoon) bits.push("<b>"+s.endingSoon+"</b> end this week");
+      if(d.national.length) bits.push("plus <b>"+d.national.length+"</b> nationwide");
+      t.innerHTML=bits.map(function(b){ return "<span>"+b+"</span>"; }).join("<span aria-hidden=true>✂</span>");
+    }
+
+    // ---- popover ticket ----
+    function show(g){
+      close();
+      groups.forEach(function(x){ x.el.classList.toggle("sel", x===g); });
+      var p=document.createElement("div"); p.className="pop"; p.setAttribute("role","dialog");
+      var first=g.items[0];
+      var x=document.createElement("button"); x.className="x"; x.type="button"; x.setAttribute("aria-label","Close"); x.textContent="×"; x.onclick=close; p.appendChild(x);
+      var o=document.createElement("p"); o.className="po"; o.textContent=first.offer; p.appendChild(o);
+      var pl=document.createElement("p"); pl.className="pp";
+      pl.textContent=(first.salon? first.salon+" · " : "")+first.city+", "+first.state+" · "+endsTxt(first.expires)+(first.verified?" · ✓ verified":"");
+      p.appendChild(pl);
+      var row=document.createElement("div"); row.className="row";
+      var go=document.createElement("a"); go.className="btn"; go.href=first.url; go.target="_blank"; go.rel="noopener nofollow"; go.textContent="Get coupon"; row.appendChild(go);
+      var see=document.createElement("button"); see.className="chip"; see.type="button"; see.textContent="Details";
+      see.onclick=function(){ seeCard(first); }; row.appendChild(see);
+      p.appendChild(row);
+      if(g.items.length>1){ var m=document.createElement("p"); m.className="more";
+        m.textContent="+"+(g.items.length-1)+" more here: "+g.items.slice(1,4).map(function(i){ return i.offer+(i.salon?" at "+i.salon:""); }).join(" · ")+(g.items.length>4?" …":""); p.appendChild(m); }
+      var wrap=document.getElementById("mapwrap");
+      if(wrap.clientWidth<560){ p.classList.add("sheet"); wrap.insertBefore(p, document.getElementById("ticker")); }   // phones: under the map
+      else wrap.appendChild(p);
+      openPop={el:p,g:g}; placePop();
+    }
+    function placePop(){
+      if(!openPop) return;
+      if(openPop.el.classList.contains("sheet")) return;
+      var m=svg.getScreenCTM(), wrap=document.getElementById("mapwrap").getBoundingClientRect();
+      if(!m) return;
+      var pt=svg.createSVGPoint(); pt.x=openPop.g.x; pt.y=openPop.g.y-20*k()*1.15; pt=pt.matrixTransform(m);
+      var half=Math.min(125,(wrap.width-24)/2);
+      openPop.el.style.left=Math.max(12+half, Math.min(wrap.width-12-half, pt.x-wrap.left))+"px";
+      openPop.el.style.top=Math.max(openPop.el.offsetHeight+30, pt.y-wrap.top)+"px";
+    }
+    function close(){ if(openPop){ openPop.el.remove(); openPop=null; } groups.forEach(function(x){ x.el.classList.remove("sel"); }); }
+    function seeCard(p){
+      var c=document.querySelector('[data-id="'+p.id+'"]');
+      if(c){ c.scrollIntoView({behavior:reduce?"auto":"smooth",block:"center"}); c.classList.remove("flash"); void c.offsetWidth; c.classList.add("flash"); }
+      else window.open(p.url,"_blank","noopener");
+    }
+    svg.addEventListener("click", function(){ close(); });
+    window.addEventListener("resize", function(){ setView(view); });
+
+    // ---- "cut along the dotted line": scissors snip from A to B ----
+    function snip(x0,y0,x1,y1){
+      var lc=document.getElementById("lCut"), ls=document.getElementById("lSnip");
+      lc.textContent=""; ls.textContent="";
+      var dx=x1-x0, dy=y1-y0, len=Math.hypot(dx,dy)||1, bend=Math.min(60,len*.25);
+      var cx=(x0+x1)/2 - dy/len*bend, cy=(y0+y1)/2 + dx/len*bend;
+      var d="M"+x0+" "+y0+" Q"+cx+" "+cy+" "+x1+" "+y1;
+      var path=mk("path",{"class":"cut",d:"M"+x0+" "+y0}, lc);
+      var ref=mk("path",{d:d,fill:"none",stroke:"none"}, lc), L=ref.getTotalLength();
+      // grow the curve itself: split the quadratic at t (de Casteljau)
+      function partial(t){ var ax=x0+(cx-x0)*t, ay=y0+(cy-y0)*t, bx=cx+(x1-cx)*t, by=cy+(y1-cy)*t;
+        return "M"+x0+" "+y0+" Q"+ax+" "+ay+" "+(ax+(bx-ax)*t)+" "+(ay+(by-ay)*t); }
+      var sc=mk("g",{"class":"scissors"}, ls);
+      var b1=mk("path",{"class":"blade",d:"M0 0 L11 -2.5"}, sc), b2=mk("path",{"class":"blade",d:"M0 0 L11 2.5"}, sc);
+      mk("circle",{"class":"handle",cx:-4.5,cy:-3.2,r:2.8}, sc); mk("circle",{"class":"handle",cx:-4.5,cy:3.2,r:2.8}, sc);
+      var ms=reduce?0:Math.max(1400, Math.min(2400, 700+len*3)), t0=performance.now();
+      return new Promise(function(done){
+        (function step(now){
+          var t=ms? Math.min(1,(now-t0)/ms) : 1, e=ease(t);
+          path.setAttribute("d", partial(Math.max(e,.001)));
+          var q=ref.getPointAtLength(L*e), q2=ref.getPointAtLength(Math.min(L,L*e+.5)), q0=ref.getPointAtLength(Math.max(0,L*e-.5));
+          if(e>=1){ q2=q; q=q0; }
+          var ang=Math.atan2(q2.y-q.y,q2.x-q.x)*180/Math.PI, open=Math.abs(Math.sin(now/70))*14;   // snip snip
+          var at=e>=1? q2 : q;
+          b1.setAttribute("transform","rotate("+(-open)+")"); b2.setAttribute("transform","rotate("+open+")");
+          sc.setAttribute("transform","translate("+at.x+","+at.y+") rotate("+ang+") scale("+(k()*1.6)+")");
+          if(t<1) requestAnimationFrame(step); else { setTimeout(function(){ sc.remove(); }, 400); done(); }
+        })(performance.now());
+      });
+    }
+
+    function placeYou(x,y,label,where,radius){
+      var ly=document.getElementById("lYou"); ly.textContent="";
+      // search-radius ring: project a point `radius` miles north to get its size in map units
+      var n=proj([where.lon, where.lat+radius/69]);
+      if(n){ var r=Math.hypot(n[0]-x,n[1]-y); mk("circle",{"class":"radius",cx:x,cy:y,r:r}, ly);
+        var rt=mk("text",{"class":"rlabel",x:x,y:y-r-2,"text-anchor":"middle"}, ly); rt.textContent=radius+" mi"; ringLabel=rt; }
+      you=mk("g",{"class":"you"}, ly); you._x=x; you._y=y;
+      mk("circle",{"class":"halo",r:6}, you); mk("circle",{"class":"dot",r:6}, you);
+      var t=mk("text",{x:0,y:20,"text-anchor":"middle"}, you); t.textContent=label;
+      setView(view);
+    }
+
+    var api={
+      // called by the ZIP search with the searched place and its local deals
+      focus: function(where, local){
+        close(); if(!where) return;
+        var xy=proj([where.lon, where.lat]); if(!xy) return;
+        placeYou(xy[0], xy[1], "You · "+where.city, where, +document.getElementById("radius").value||40);
+        document.getElementById("usa").hidden=false;
+        // nearest pin among the deals the list found (fall back to nearest overall)
+        var ids={}; (local||[]).forEach(function(c){ ids[c.id]=1; });
+        var best=null;
+        groups.forEach(function(g){ if(local && local.length && !g.items.some(function(p){ return ids[p.id]; })) return;
+          var dd=Math.hypot(g.x-xy[0], g.y-xy[1]); if(!best||dd<best.d) best={g:g,d:dd}; });
+        document.getElementById("mapwrap").scrollIntoView({behavior:reduce?"auto":"smooth",block:"start"});
+        if(!best){ zoomTo(fit(xy[0]-80,xy[1]-60,xy[0]+80,xy[1]+60)); return; }
+        var g=best.g, dist=Math.hypot(g.x-xy[0], g.y-xy[1]);
+        // Frame the trip so the cut line fills a good part of the view, even for
+        // a deal 15 miles away (~13 map units at this projection).
+        zoomTo(fit(Math.min(xy[0],g.x),Math.min(xy[1],g.y),Math.max(xy[0],g.x),Math.max(xy[1],g.y), Math.max(10,dist*.45), Math.max(70,dist*1.1))).then(function(){
+          return snip(xy[0],xy[1],g.x,g.y-6*k());
+        }).then(function(){ show(g); });
+      }
+    };
+    window.ClipMap=api;
+
+    document.getElementById("usa").onclick=function(){ close(); document.getElementById("lCut").textContent=""; this.hidden=true; zoomTo([0,0,W,H]); };
+    document.getElementById("snippy").onclick=function(){
+      if(!groups.length) return;
+      close();
+      var g=groups[Math.floor(Math.random()*groups.length)];
+      var from=you? [you._x,you._y] : [view[0]+view[2]*0.1, view[1]+view[3]*0.1];
+      zoomTo([0,0,W,H],500).then(function(){ return snip(from[0],from[1],g.x,g.y-6*k()); })
+        .then(function(){ return zoomTo(fit(g.x-30,g.y-30,g.x+30,g.y+20,10,60)); }).then(function(){ document.getElementById("usa").hidden=false; show(g); });
+    };
+
+    Promise.all([fetch("/vendor/states-albers-10m.json").then(function(r){ return r.json(); }), fetch("/api/map").then(function(r){ return r.json(); })])
+      .then(function(res){
+        var us=res[0], data=res[1], path=d3.geoPath(), ls=document.getElementById("lStates");
+        var rev={}; Object.keys(ABBR).forEach(function(a){ rev[ABBR[a]]=a; });
+        topojson.feature(us, us.objects.states).features.forEach(function(f){
+          var el=mk("path",{"class":"st",d:path(f)}, ls); el.dataset.ab=rev[f.properties.name]||"";
+          var t=mk("title",{}, el); var n=data.states[el.dataset.ab]||0; t.textContent=f.properties.name+(n?" · "+n+" live deal"+(n>1?"s":""):"");
+          el.addEventListener("click", function(ev){ ev.stopPropagation(); close(); var b=el.getBBox(); document.getElementById("usa").hidden=false; zoomTo(fit(b.x,b.y,b.x+b.width,b.y+b.height,30)); });
+        });
+        var lc=document.getElementById("lCities");
+        CITIES.forEach(function(c){ var xy=proj([c[2],c[1]]); if(!xy) return;
+          var g=mk("g",{"class":"city"}, lc); g._x=xy[0]; g._y=xy[1]; mk("circle",{r:2.2}, g); var t=mk("text",{x:5,y:3.5}, g); t.textContent=c[0]; cityEls.push(g); });
+        build(data);
+      }).catch(function(){ document.getElementById("mapwrap").hidden=true; });
     })();
     </script>
     </body>
@@ -921,6 +1223,27 @@ data:
 
     const clientIp = req => (req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
 
+    const VENDOR = {
+      "states-albers-10m.json": "https://cdn.jsdelivr.net/npm/us-atlas@3/states-albers-10m.json",
+      "d3-array.min.js": "https://cdn.jsdelivr.net/npm/d3-array@3/dist/d3-array.min.js",
+      "d3-geo.min.js": "https://cdn.jsdelivr.net/npm/d3-geo@3/dist/d3-geo.min.js",
+      "topojson-client.min.js": "https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js",
+    };
+    const vendorMem = {};
+    async function vendor(name) {
+      if (vendorMem[name]) return vendorMem[name];
+      const file = path.join(store.DATA_DIR, "vendor", name);
+      try { return (vendorMem[name] = fs.readFileSync(file)); } catch {}
+      try {
+        const r = await fetch(VENDOR[name]);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const buf = Buffer.from(await r.arrayBuffer());
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, buf);
+        return (vendorMem[name] = buf);
+      } catch (e) { console.log("[vendor]", name, e.message); return null; }
+    }
+
     // ---- routes ----------------------------------------------------------------
     async function handle(req, res) {
       const u = new URL(req.url, "http://x");
@@ -965,6 +1288,46 @@ data:
         const t = db.votes[id] || (db.votes[id] = { worked: 0, expired: 0 });
         t[v]++; store.save();
         return send(res, 200, t);
+      }
+
+      // Everything the Drop Map needs in one call: a pin per placed market/salon,
+      // per-state counts for the tint, and a few headline stats for the ticker.
+      if (req.method === "GET" && u.pathname === "/api/map") {
+        const live = Object.values(db.coupons).filter(isLive);
+        const pins = [], states = {};
+        const price = c => { const m = String(c.offer).match(/\$(\d+(?:\.\d{2})?)/); return m ? +m[1] : null; };
+        for (const c of live.filter(c => c.scope === "local")) {
+          for (const l of c.locs || []) {
+            states[l.state] = (states[l.state] || 0) + 1;
+            if (l.lat == null) continue;
+            pins.push({ id: c.id, offer: c.offer, price: price(c), off: /off/i.test(c.offer), lat: +l.lat.toFixed(4), lon: +l.lon.toFixed(4),
+              salon: l.salon || null, city: l.city, state: l.state, expires: c.expires || null, url: c.url,
+              verified: !!c.checkedAt, isNew: Date.now() - Date.parse(c.firstSeen) < 30 * 3600e3 });
+          }
+        }
+        const priced = pins.filter(p => p.price && !p.off).sort((a, b) => a.price - b.price);
+        const soon = new Set(pins.filter(p => p.expires && (Date.parse(p.expires) - Date.now()) < 7 * 86400e3).map(p => p.id));
+        const last = db.crawls[db.crawls.length - 1] || null;
+        return send(res, 200, {
+          pins, states,
+          national: live.filter(c => c.scope === "national" && !c.evergreen).map(c => ({ id: c.id, offer: c.offer, url: c.url })),
+          stats: { deals: new Set(pins.map(p => p.id)).size, places: new Set(pins.map(p => p.city + p.state)).size,
+            cheapest: priced[0] ? { price: priced[0].price, city: priced[0].city, state: priced[0].state } : null,
+            endingSoon: soon.size, newToday: new Set(pins.filter(p => p.isNew).map(p => p.id)).size },
+          lastCrawl: last && last.at,
+        });
+      }
+
+      // Map geometry + tiny libs, cached on the data volume on first use so the
+      // page never depends on a third-party CDN being up.
+      if (req.method === "GET" && u.pathname.startsWith("/vendor/")) {
+        const name = u.pathname.slice(8);
+        if (!VENDOR[name]) return send(res, 404, { error: "not found" });
+        const body = await vendor(name);
+        if (!body) return send(res, 502, { error: "unavailable" });
+        res.writeHead(200, { "content-type": name.endsWith(".json") ? "application/json" : "text/javascript",
+          "cache-control": "public, max-age=604800", "x-content-type-options": "nosniff" });
+        return res.end(body);
       }
 
       if (req.method === "GET" && u.pathname === "/api/status") {
