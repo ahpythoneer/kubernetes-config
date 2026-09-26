@@ -19,7 +19,7 @@ spec:
         app: clipdrop
       annotations:
         # bump to force a rollout when the source ConfigMap changes
-        clipdrop/src-rev: "3"
+        clipdrop/src-rev: "4"
     spec:
       initContainers:
       # make the NFS-backed data dir writable by the non-root app (uid 1000)

@@ -245,6 +245,7 @@ data:
         .map(m => ({ url: m[1], mod: m[2] ? m[2].slice(0, 10) : null }))
         .filter(p => /clips|\d+-\d+|off|coupon/i.test(p.url) && !/uber|subway|doordash|shein|canada/i.test(p.url));
       const posts = [], seenIds = new Set();
+      let stale = 0;
       for (const p of pages) {
         await sleep(DELAY_MS);
         let h;
@@ -260,6 +261,11 @@ data:
           if (seenIds.has(id)) continue;
           seenIds.add(id);
           let block = parts[i - 1].slice(-700).replace(/\b(SAVE|Print (code|coupon)|GET CODE)\b/gi, " ").replace(/\s+/g, " ").trim();
+          // The site keeps some dead offers inline ("Expired codes ... Victoria area")
+          // and old ones mention past years ("valid until 02/21/2025", "...2025").
+          const yr = new Date().getFullYear();
+          if (/expired|has ended|no longer valid/i.test(block)) { stale++; continue; }
+          if ([...block.matchAll(/\b(20\d\d)\b/g)].some(m => +m[1] < yr)) { stale++; continue; }
           if (!/\$\s?\d/.test(block)) {
             // Salon-only rows ("Wolf Pen Plaza at 1901 Texas Ave S in College Station")
             // take their price from the nearest heading above them on the page.
@@ -280,7 +286,7 @@ data:
             posted: p.mod || new Date().toISOString().slice(0, 10), couponUrl: link, unverified: true });
         }
       }
-      log(`greatclips.coupons: ${pages.length} pages, ${posts.length} coupon links`);
+      log(`greatclips.coupons: ${pages.length} pages, ${posts.length} coupon links (${stale} skipped as expired/old)`);
       return posts;
     }
 
@@ -778,17 +784,14 @@ data:
       return c.evergreen || Date.now() - Date.parse(c.posted + "T12:00:00Z") < days * 86400e3;
     }
 
-    // A metro market ("Austin area") covers roughly this far around the city
-    // centre; a single-salon offer only its neighbourhood. A visitor matches when
-    // (distance to centre - reach) is within their chosen radius.
-    const METRO_REACH_MI = 25, SALON_REACH_MI = 10;
+    // A deal matches when its market centre (or salon's city) is within the
+    // visitor's radius, and the card shows exactly that distance.
     function nearest(c, where, radius) {
       let best = null;
       for (const l of c.locs || []) {
         if (l.lat == null) continue;
         const mi = geo.miles(where, l);
-        const reach = l.salon ? SALON_REACH_MI : METRO_REACH_MI;
-        if (mi - reach <= radius && (!best || mi < best.miles))
+        if (mi <= radius && (!best || mi < best.miles))
           best = { miles: Math.round(mi), place: l.salon ? `${l.salon}, ${l.city}, ${l.state}` : `${l.city} area, ${l.state}` };
       }
       return best;
