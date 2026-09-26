@@ -261,11 +261,9 @@ data:
           if (seenIds.has(id)) continue;
           seenIds.add(id);
           let block = parts[i - 1].slice(-700).replace(/\b(SAVE|Print (code|coupon)|GET CODE)\b/gi, " ").replace(/\s+/g, " ").trim();
-          // The site keeps some dead offers inline ("Expired codes ... Victoria area")
-          // and old ones mention past years ("valid until 02/21/2025", "...2025").
-          const yr = new Date().getFullYear();
+          // The site keeps some dead offers inline ("Expired codes ... Victoria area");
+          // the rest are settled by checking the coupon page itself.
           if (/expired|has ended|no longer valid/i.test(block)) { stale++; continue; }
-          if ([...block.matchAll(/\b(20\d\d)\b/g)].some(m => +m[1] < yr)) { stale++; continue; }
           if (!/\$\s?\d/.test(block)) {
             // Salon-only rows ("Wolf Pen Plaza at 1901 Texas Ave S in College Station")
             // take their price from the nearest heading above them on the page.
@@ -317,6 +315,48 @@ data:
       return { perks, posts };
     }
 
+    // ---- coupon-page verification ------------------------------------------------
+    // Owner-approved (2026-09-26): read each offers.greatclips.com page at most
+    // once a day to get its real "Offer expires" date and market, even though that
+    // host's robots.txt disallows crawlers. Read-only: never "Redeem" (that burns a
+    // single-use code). Slow and capped.
+    const CHECK_DELAY_MS = +(process.env.CHECK_DELAY_MS || 4000);
+    const CHECK_MAX = +(process.env.CHECK_MAX || 150);
+    let checksThisRun = 0;
+
+    async function checkOffer(url, db) {
+      const id = url.split("/").pop();
+      db.checks = db.checks || {};
+      const prev = db.checks[id];
+      if (prev && Date.now() - Date.parse(prev.at) < 20 * 3600e3) return prev;
+      if (checksThisRun >= CHECK_MAX) return prev || null;
+      checksThisRun++;
+      await sleep(CHECK_DELAY_MS);
+      let r;
+      try {
+        const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 30000);
+        r = await fetch(url, { headers: { "user-agent": UA }, signal: ctl.signal }).finally(() => clearTimeout(t));
+      } catch (e) { return prev || null; }
+      const res = { at: new Date().toISOString(), http: r.status, expires: null, market: null, descr: null, rolling: false };
+      if (r.ok) {
+        const t = text(await r.text());
+        // Market coupons say "Offer expires 10/09/2026", single-salon ones "Expires 08/19/2025".
+        const terms = (t.match(/Terms and Conditions\s+(.{0,600}?)All Great Clips/i) || [])[1] || t;
+        const em = terms.match(/(?:Offer\s+)?expires?:?\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+        if (em) res.expires = `${em[3]}-${em[1].padStart(2, "0")}-${em[2].padStart(2, "0")}`;
+        res.rolling = /within \d+ days of (initial )?code generation/i.test(t);
+        const mm = terms.match(/Valid (?:only )?at participating ([^.]{3,120}?) Great Clips salons?/i);
+        if (mm) res.market = mm[1].trim();
+        // "Valid at Great Clips Sherwood Plaza at 3384 Robinhood Rd in Winston-Salem, NC."
+        const sm = terms.match(/Valid (?:only )?at Great Clips (.{2,60}?) at (\d[^.]{2,80}?) in ([A-Z][A-Za-z .'-]{1,40}?),\s*([A-Z]{2})\b/);
+        if (sm) res.salon = { name: sm[1].trim(), street: sm[2].trim(), city: sm[3].trim(), state: sm[4] };
+        const dm = t.match(/Description\s+(.{10,300}?)(?:\s+To redeem|\s+Terms and Conditions)/i);
+        if (dm) res.descr = dm[1].trim();
+      }
+      db.checks[id] = res;
+      return res;
+    }
+
     // ---- main ------------------------------------------------------------------
     async function run() {
       if (busy) return;
@@ -353,7 +393,33 @@ data:
           report.sources.greatclips = { ok: true, perks: g.perks.length, pages: g.posts.length };
         } catch (e) { log("greatclips.com failed: " + e.message); report.sources.greatclips = { ok: false, error: e.message }; }
 
+        checksThisRun = 0;
+        const today = now.slice(0, 10);
+        let dead = 0, verified = 0;
         for (const post of posts) {
+          // Check the coupon page first: expired ones never reach the model, and a
+          // live one gets its real end date and market from the page's terms.
+          if (post.couponUrl) {
+            const chk = await checkOffer(post.couponUrl, db);
+            if (chk) {
+              if (chk.http === 404 || chk.http === 410 || (chk.expires && chk.expires < today)) { dead++; continue; }
+              if (chk.http === 200 && (chk.expires || chk.rolling)) {
+                verified++;
+                post.unverified = false;
+                post.checked = chk;
+                // Terms are authoritative: put them first so the parsers see them.
+                const ex = chk.expires ? ` Offer expires ${chk.expires.slice(5, 7)}/${chk.expires.slice(8)}/${chk.expires.slice(0, 4)}.` : "";
+                if (chk.salon) {
+                  // The page names the exact salon, so it overrides whatever the listing said.
+                  post.salonHint = { name: chk.salon.name, city: chk.salon.city, state: chk.salon.state };
+                  post.title = `Great Clips ${chk.salon.name}, ${chk.salon.street}, ${chk.salon.city}, ${chk.salon.state}`;
+                  post.body = `${chk.descr || ""}${ex} ${post.body}`;
+                } else {
+                  post.body = `${chk.descr || ""} Valid only at participating ${chk.market || ""} Great Clips salons.${ex} ${post.body}`;
+                }
+              }
+            }
+          }
           let x = await extract(post);
           if (x) report.llm = llm.endpoint();
           else x = post.official ? null : heuristic(post);
@@ -366,7 +432,7 @@ data:
           // over-guesses it), and the email sign-up perk is already an evergreen card.
           if (post.unverified && x.scope === "national" && !NATIONAL.test(all)) x.scope = "local";
           if (post.unverified && /mailing list|email list|sign[- ]?up/i.test(all) && /\$\s?2\b/.test(all)) { log(`  skip sign-up perk dup`); continue; }
-          const exp = parseExpiry(post.title + " " + post.body, ref) || (/^\d{4}-\d{2}-\d{2}$/.test(x.expires || "") ? x.expires : null);
+          const exp = (post.checked && post.checked.expires) || parseExpiry(post.title + " " + post.body, ref) || (/^\d{4}-\d{2}-\d{2}$/.test(x.expires || "") ? x.expires : null);
           const h = post.salonHint;
           const salon = h ? { name: h.name, city: h.city, state: (h.state || String(x.salon_state || "")).toUpperCase() }
             : x.salon_city ? { name: x.salon_name || null, city: x.salon_city, state: String(x.salon_state || "").toUpperCase() } : null;
@@ -381,16 +447,27 @@ data:
             offer: offerText(x.offer, post), title: post.title.slice(0, 140),
             terms: x.terms ? String(x.terms).slice(0, 300) : null, expires: exp, posted: post.posted,
             source: post.source, url: post.couponUrl || post.url, thread: post.url, locs,
-            unverified: !!post.unverified, confidence: post.unverified ? 0.5 : report.llm ? 0.9 : 0.6,
+            unverified: !!post.unverified, checkedAt: post.checked ? post.checked.at : null,
+            confidence: post.unverified ? 0.5 : report.llm ? 0.9 : 0.6,
           });
           log(`  + ${x.scope} ${offerText(x.offer, post)} ${locs.map(l => (l.city || "*") + "," + l.state + (l.salon ? " [" + l.salon + "]" : "")).join(" ")} exp=${exp}${post.unverified ? " (unverified)" : ""}`);
         }
+        // A coupon its source no longer lists (or now filters out as expired) is
+        // removed right away when that source crawled fine; if the source was down,
+        // it keeps its last state.
+        const okSource = { "Slickdeals": report.sources.slickdeals?.ok, "greatclips.coupons": report.sources.greatclipsCoupons?.ok };
+        for (const [id, c] of Object.entries(db.coupons))
+          if (!c.evergreen && !seen.has(id) && okSource[c.source]) { delete db.coupons[id]; delete db.votes[id]; }
         // Standing perks that vanished from the official page are dropped.
         for (const [id, c] of Object.entries(db.coupons)) if (c.evergreen && !seen.has(id) && report.sources.greatclips?.ok) delete db.coupons[id];
         // Forget anything long gone.
         for (const [id, c] of Object.entries(db.coupons))
           if (Date.now() - Date.parse(c.lastSeen) > 90 * 86400e3) { delete db.coupons[id]; delete db.votes[id]; }
 
+        report.checks = { fetched: checksThisRun, verified, dead };
+        log(`coupon pages: ${checksThisRun} fetched, ${verified} verified live, ${dead} expired/gone`);
+        // Forget checks for links we no longer see anywhere.
+        for (const id of Object.keys(db.checks || {})) if (Date.now() - Date.parse(db.checks[id].at) > 14 * 86400e3) delete db.checks[id];
         report.found = seen.size;
         report.ms = Date.now() - started.getTime();
         db.crawls.push(report);
@@ -527,6 +604,7 @@ data:
     .tag.hot{border-color:transparent;background:var(--accent);color:#fff}
     .tag.soon{color:var(--warn);border-color:currentColor}
     .tag.unv{border-style:dashed}
+    .tag.ok{color:var(--ok);border-color:currentColor}
     .perf{position:relative;height:0;border-top:2px dashed var(--line);margin:0 12px}
     .perf::before,.perf::after{content:"";position:absolute;top:-11px;width:20px;height:20px;border-radius:50%;
       background:var(--bg);border:1px solid var(--line)}
@@ -628,6 +706,7 @@ data:
       if(c.miles!=null) tags.appendChild(el("span","tag",c.miles+" mi · "+c.place));
       else if(c.markets && c.markets.length) tags.appendChild(el("span","tag",c.markets.slice(0,3).join(" · ")));
       if(c.scope==="national" && !c.evergreen) tags.appendChild(el("span","tag","nationwide"));
+      if(c.checkedAt){ var k=el("span","tag ok","✓ verified"); k.title="We checked this coupon's own page on "+new Date(c.checkedAt).toLocaleDateString()+" and it was still valid."; tags.appendChild(k); }
       if(c.unverified){ var u=el("span","tag unv","unverified"); u.title="Listed by a coupon site with no end date. It may have expired, so check the coupon page and tap Worked or Didn't work."; tags.appendChild(u); }
       if(!c.evergreen && Date.now()-Date.parse(c.firstSeen)<36e5*30) tags.appendChild(el("span","tag hot","new today"));
       top.appendChild(tags);
@@ -811,7 +890,7 @@ data:
         url: c.url, thread: c.thread && c.thread !== c.url ? c.thread : null,
         markets: (c.locs || []).map(l => l.salon ? `${l.salon}, ${l.city}, ${l.state}` : l.city ? `${l.city} area, ${l.state}` : `select ${l.state} salons`),
         miles: near ? near.miles : null, place: near ? near.place : null,
-        posted: c.posted, firstSeen: c.firstSeen, votes: v, unverified: !!c.unverified,
+        posted: c.posted, firstSeen: c.firstSeen, votes: v, unverified: !!c.unverified, checkedAt: c.checkedAt || null,
       };
     }
 
