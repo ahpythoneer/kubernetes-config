@@ -859,6 +859,9 @@ data:
       if (v && v.expired >= 3 && v.expired > v.worked * 2) return false; // visitors say it's dead
       if (Date.now() - Date.parse(c.lastSeen) > 3 * 86400e3) return false; // gone from the source
       if (c.expires) return c.expires >= today();
+      // No fixed end date ("use within 14 days of generation") but its page was
+      // checked live in the last 2 days: trust the check over the post's age.
+      if (c.checkedAt && Date.now() - Date.parse(c.checkedAt) < 2 * 86400e3) return true;
       const days = c.unverified ? NO_DATE_DAYS_LISTED : NO_DATE_DAYS;
       return c.evergreen || Date.now() - Date.parse(c.posted + "T12:00:00Z") < days * 86400e3;
     }
