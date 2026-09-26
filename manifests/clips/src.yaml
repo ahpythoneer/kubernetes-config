@@ -272,7 +272,11 @@ data:
           const sm2 = block.match(/(?:Great Clips\s+)?([A-Z][\w'&.-]*(?:\s+[A-Z0-9][\w'&.-]*){0,5}) at \d[^|]*? in ([A-Z][a-zA-Z.'-]+(?:\s[A-Z][a-zA-Z.'-]+){0,2})(?:,\s*([A-Z]{2}))?[.,]?\s*$/);
           const salonHint = sm2 ? { name: sm2[1].replace(/^(Salon:|SAVE|[A-Z]{3,9}\s+\d{4})\s*/i, "").trim(),
             city: sm2[2].replace(/[.,]+$/, ""), state: sm2[3] || null } : null;
-          posts.push({ source: "greatclips.coupons", url: p.url, title: block.slice(-160), body: block, salonHint,
+          // Card subtitle: the salon when we know it, else the offer's own last sentence.
+          const street = sm2 ? (block.match(/ at (\d[^|]*?) in [A-Z]/) || [])[1] : null;
+          const title = salonHint ? `Great Clips ${salonHint.name}${street ? ", " + street.trim() : ""}, ${salonHint.city}`
+            : block.replace(/^Price on page:.*?Salon:\s*/, "").split(/(?<=[.!])\s+/).filter(x => /\$|area|salon/i.test(x)).slice(-1)[0] || block.slice(-120);
+          posts.push({ source: "greatclips.coupons", url: p.url, title: title.slice(0, 140), body: block, salonHint,
             posted: p.mod || new Date().toISOString().slice(0, 10), couponUrl: link, unverified: true });
         }
       }
