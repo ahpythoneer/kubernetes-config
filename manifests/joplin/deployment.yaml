@@ -31,7 +31,7 @@ spec:
       containers:
       - name: joplin-server
         image: joplin/server:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         command: ["/bin/sh", "-c"]
         args: [". /vault/secrets/db && exec tini -- yarn start-prod"]
         ports:
