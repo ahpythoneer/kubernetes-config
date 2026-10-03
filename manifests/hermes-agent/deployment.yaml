@@ -54,7 +54,7 @@ spec:
       containers:
       - name: orchestrator
         image: python:3.11-slim
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         command: ["/bin/bash", "-c"]
         args:
         - |

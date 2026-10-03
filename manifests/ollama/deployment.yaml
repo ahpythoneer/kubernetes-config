@@ -7,6 +7,9 @@ metadata:
     app: ollama
 spec:
   replicas: 1
+  # single GPU: the old pod must release it before the new one can start
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: ollama
@@ -37,7 +40,7 @@ spec:
       containers:
       - name: ollama
         image: ollama/ollama:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - name: http
           containerPort: 11434

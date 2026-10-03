@@ -63,7 +63,7 @@ spec:
       containers:
       - name: prometheus
         image: prom/prometheus:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 9090
           name: http
