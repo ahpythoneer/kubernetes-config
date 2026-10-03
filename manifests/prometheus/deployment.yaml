@@ -102,10 +102,11 @@ spec:
           failureThreshold: 3
         resources:
           requests:
-            memory: 512Mi
+            memory: 1Gi
             cpu: 500m
           limits:
-            memory: 1Gi
+            # WAL replay after restarts needs >1Gi (OOMKilled at 1Gi on 2026-10-03)
+            memory: 2Gi
             cpu: 1000m
         securityContext:
           allowPrivilegeEscalation: false
