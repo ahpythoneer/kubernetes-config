@@ -91,6 +91,12 @@ data:
       - targets:
         - 'nvidia-dcgm-exporter.gpu-operator.svc.cluster.local:9400'
 
+    # kube-state-metrics: object state (pods/nodes/deployments/jobs) for alerting
+    - job_name: 'kube-state-metrics'
+      honor_labels: true   # keep the object's own namespace/pod labels
+      static_configs:
+      - targets: ['kube-state-metrics.monitoring.svc:8080']
+
     # Kubernetes Service Endpoints (pod metrics via annotations)
     - job_name: 'kubernetes-service-endpoints'
       kubernetes_sd_configs:
