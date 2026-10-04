@@ -1,0 +1,82 @@
+# Auto-unseal for the single-node Vault (Shamir 1/1, file storage).
+# Every 10s: if vault-0 reports sealed (`vault status` exit code 2), unseal it with
+# the key from Secret `vault-unseal-key`. That Secret is created at runtime and is
+# NEVER committed (this repo is public); Secrets are encrypted at rest in etcd.
+#   read -s K && kubectl -n vault create secret generic vault-unseal-key --from-literal=key="$K"; unset K
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-unsealer
+  namespace: vault
+  labels:
+    app: vault-unsealer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault-unsealer
+  template:
+    metadata:
+      labels:
+        app: vault-unsealer
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        fsGroup: 1000          # makes the mounted key group-readable for uid 100
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: unsealer
+        image: hashicorp/vault:1.15.2
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          echo "vault-unsealer watching $VAULT_ADDR"
+          while true; do
+            vault status >/dev/null 2>&1; rc=$?
+            if [ "$rc" = 2 ]; then
+              if vault operator unseal "$(cat /unseal/key)" >/dev/null 2>&1; then
+                echo "$(date -u +%FT%TZ) vault was sealed -> unsealed"
+              else
+                echo "$(date -u +%FT%TZ) vault sealed, unseal attempt FAILED"
+              fi
+            elif [ "$rc" = 1 ]; then
+              echo "$(date -u +%FT%TZ) vault unreachable (pod starting?)"
+            fi
+            sleep 10
+          done
+        env:
+        - name: VAULT_ADDR
+          value: http://vault-0.vault-internal.vault.svc:8200
+        - name: HOME
+          value: /tmp
+        resources:
+          requests:
+            cpu: 5m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: unseal-key
+          mountPath: /unseal
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: unseal-key
+        secret:
+          secretName: vault-unseal-key
+          defaultMode: 0440
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Mi

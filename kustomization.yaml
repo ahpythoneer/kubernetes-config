@@ -55,6 +55,7 @@ resources:
   # Vault Secret Manager
   - manifests/vault/namespace.yaml
   - manifests/vault/application.yaml
+  - manifests/vault/unsealer.yaml
 
   # Harbor Container Registry
   - manifests/harbor/namespace.yaml
