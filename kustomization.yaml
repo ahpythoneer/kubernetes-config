@@ -10,6 +10,7 @@ resources:
   - manifests/monitoring/namespace.yaml
   - manifests/monitoring/node-exporter.yaml
   - manifests/monitoring/kube-state-metrics.yaml
+  - manifests/monitoring/pve-exporter.yaml
   
   # Heimdall
   - manifests/heimdall/namespace.yaml
@@ -27,6 +28,7 @@ resources:
 
   # Grafana
   - manifests/grafana/namespace.yaml
+  - manifests/grafana/provisioning.yaml
   - manifests/grafana/deployment.yaml
   - manifests/grafana/ingress.yaml
 

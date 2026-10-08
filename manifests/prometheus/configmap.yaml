@@ -91,6 +91,23 @@ data:
       - targets:
         - 'nvidia-dcgm-exporter.gpu-operator.svc.cluster.local:9400'
 
+    # Proxmox VE (node-01 at 10.0.0.41; node-02 is intentionally powered off) via pve-exporter
+    - job_name: 'pve'
+      metrics_path: /pve
+      params:
+        module: [default]
+        cluster: ['1']
+        node: ['1']
+      static_configs:
+      - targets: ['10.0.0.41']
+      relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: pve-exporter.monitoring.svc:9221
+
     # kube-state-metrics: object state (pods/nodes/deployments/jobs) for alerting
     - job_name: 'kube-state-metrics'
       honor_labels: true   # keep the object's own namespace/pod labels

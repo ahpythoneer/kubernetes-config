@@ -68,6 +68,18 @@ spec:
         volumeMounts:
         - name: grafana-storage
           mountPath: /var/lib/grafana
+        # provisioning from git (manifests/grafana/provisioning.yaml)
+        - name: provisioning
+          mountPath: /etc/grafana/provisioning/datasources/gitops.yaml
+          subPath: datasources.yaml
+          readOnly: true
+        - name: provisioning
+          mountPath: /etc/grafana/provisioning/dashboards/gitops.yaml
+          subPath: dashboards.yaml
+          readOnly: true
+        - name: dashboards
+          mountPath: /var/lib/grafana-dashboards
+          readOnly: true
         resources:
           requests:
             memory: 256Mi
@@ -79,4 +91,10 @@ spec:
       - name: grafana-storage
         persistentVolumeClaim:
           claimName: grafana-storage
+      - name: provisioning
+        configMap:
+          name: grafana-provisioning
+      - name: dashboards
+        configMap:
+          name: grafana-dashboards
       serviceAccountName: grafana
