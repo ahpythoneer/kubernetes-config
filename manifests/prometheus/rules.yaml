@@ -196,6 +196,46 @@ data:
           summary: "Job {{ $labels.namespace }}/{{ $labels.job_name }} failed"
           description: "Check its pod logs; delete the Job to clear this alert."
 
+    # ---------------------------------------------------------------- proxmox
+    # node-02 is intentionally powered off (node-01 has the capacity) — excluded.
+    - name: proxmox
+      rules:
+      - alert: ProxmoxNodeDown
+        expr: pve_up{id=~"node/.*",id!="node/node-02"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Proxmox node {{ $labels.id }} is down"
+          description: "Every VM on it (k8s nodes, AD, TrueNAS, Guacamole...) is affected."
+
+      - alert: ProxmoxStorageFilling
+        expr: (pve_disk_usage_bytes{id=~"storage/.*",id!~"storage/node-02/.*"} / pve_disk_size_bytes{id=~"storage/.*",id!~"storage/node-02/.*"}) * 100 > 85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Proxmox storage {{ $labels.id }} is {{ $value | printf \"%.0f\" }}% full"
+          description: "VM disks on this pool can't grow once it fills up."
+
+      - alert: ProxmoxVMStopped
+        expr: pve_up{id=~"qemu/.*|lxc/.*"} == 0 and pve_up{id=~"qemu/.*|lxc/.*"} offset 30m == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Proxmox guest {{ $labels.id }} stopped"
+          description: "It was running 30 minutes ago. If this was intentional, ignore — the alert clears on its own."
+
+      - alert: ProxmoxExporterDown
+        expr: up{job="pve"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Proxmox metrics are not being collected"
+          description: "pve-exporter can't reach 10.0.0.41 or the API token stopped working (PVEAuditor on monitoring@pve and its token)."
+
     # ---------------------------------------------------------------- monitoring itself
     - name: monitoring
       rules:
