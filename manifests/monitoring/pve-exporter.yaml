@@ -44,10 +44,15 @@ spec:
         - name: config
           mountPath: /etc/prometheus
           readOnly: true
+        - name: tmp            # python needs a writable tmpdir; root FS stays read-only
+          mountPath: /tmp
       volumes:
       - name: config
         secret:
           secretName: pve-exporter
+      - name: tmp
+        emptyDir:
+          sizeLimit: 16Mi
 ---
 apiVersion: v1
 kind: Service
