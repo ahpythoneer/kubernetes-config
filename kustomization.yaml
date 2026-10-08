@@ -163,3 +163,8 @@ resources:
   - manifests/clips/service.yaml
   - manifests/clips/certificate.yaml
   - manifests/clips/ingress.yaml
+
+  # phpIPAM — LAN-only IP address management at 10.0.0.167 (DB creds: runtime Secret ipam/phpipam-db)
+  - manifests/ipam/namespace.yaml
+  - manifests/ipam/mariadb.yaml
+  - manifests/ipam/phpipam.yaml

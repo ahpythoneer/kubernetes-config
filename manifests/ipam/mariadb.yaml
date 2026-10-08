@@ -1,0 +1,65 @@
+# MariaDB for phpIPAM. Credentials come from the runtime-only Secret `phpipam-db`
+# (keys: root-password, password) — never committed; this repo is public.
+apiVersion: v1
+kind: Service
+metadata:
+  name: phpipam-db
+  namespace: ipam
+spec:
+  selector:
+    app: phpipam-db
+  ports:
+  - name: mysql
+    port: 3306
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: phpipam-db
+  namespace: ipam
+spec:
+  serviceName: phpipam-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: phpipam-db
+  template:
+    metadata:
+      labels:
+        app: phpipam-db
+    spec:
+      containers:
+      - name: mariadb
+        image: mariadb:11.8
+        env:
+        - name: MARIADB_ROOT_PASSWORD
+          valueFrom: {secretKeyRef: {name: phpipam-db, key: root-password}}
+        - name: MARIADB_DATABASE
+          value: phpipam
+        - name: MARIADB_USER
+          value: phpipam
+        - name: MARIADB_PASSWORD
+          valueFrom: {secretKeyRef: {name: phpipam-db, key: password}}
+        ports:
+        - name: mysql
+          containerPort: 3306
+        readinessProbe:
+          exec:
+            command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          requests: {cpu: 50m, memory: 256Mi}
+          limits: {memory: 512Mi}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: nfs-storage
+      resources:
+        requests:
+          storage: 5Gi
