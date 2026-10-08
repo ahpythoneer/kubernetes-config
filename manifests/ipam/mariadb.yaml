@@ -43,9 +43,11 @@ spec:
         ports:
         - name: mysql
           containerPort: 3306
+        # TCP check: healthcheck.sh runs as root and can't read its 0600 mysql-owned
+        # .my-healthcheck.cnf on the root-squashed NFS volume
         readinessProbe:
-          exec:
-            command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+          tcpSocket:
+            port: mysql
           initialDelaySeconds: 10
           periodSeconds: 10
         resources:
