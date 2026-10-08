@@ -28,6 +28,13 @@ spec:
       labels:
         app: phpipam-db
     spec:
+      # Run as the image's mysql user (uid/gid 999) from the start. As root, the
+      # entrypoint tries to chown the datadir and fails on the root-squashed NFS
+      # volume ("find: /var/lib/mysql/mysql: Permission denied").
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
       containers:
       - name: mariadb
         image: mariadb:11.8
