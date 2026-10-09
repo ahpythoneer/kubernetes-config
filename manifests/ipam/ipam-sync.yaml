@@ -168,7 +168,7 @@ spec:
             command: ["php", "/scripts/sync.php"]
             env:
             - name: DRY_RUN
-              value: "true"     # first deploy: report only; flip to "false" after reviewing a run
+              value: "false"    # reviewed dry runs on 2026-10-09; set "true" to preview changes
             - name: SYNC_MARKER
               value: "[pve-sync]"
             resources:
