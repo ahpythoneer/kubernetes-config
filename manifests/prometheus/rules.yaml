@@ -247,3 +247,35 @@ data:
         annotations:
           summary: "kube-state-metrics is down"
           description: "Pod, node and Vault alerts are blind until it is back."
+
+    # ---------------------------------------------------------------- backups
+    # Written by /opt/vaultwarden/backup-to-onedrive.sh (cron 03:00) on 10.0.0.25 through
+    # node-exporter's textfile collector (/opt/vaultwarden/metrics).
+    - name: backups
+      rules:
+      - alert: VaultwardenBackupFailed
+        expr: vaultwarden_backup_last_run_success == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Primary Vaultwarden backup to OneDrive failed"
+          description: "The last run of /opt/vaultwarden/backup-to-onedrive.sh on {{ $labels.instance }} failed. See /opt/vaultwarden/backup.log on the VM."
+
+      - alert: VaultwardenBackupStale
+        expr: time() - vaultwarden_backup_last_success_timestamp_seconds > 93600
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No successful Vaultwarden backup for over 26 hours"
+          description: "Last success was {{ $value | humanizeDuration }} ago. The cron job may not be running (check crontab -l and /opt/vaultwarden/backup.log on 10.0.0.25)."
+
+      - alert: VaultwardenBackupMetricsMissing
+        expr: absent(vaultwarden_backup_last_success_timestamp_seconds)
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Vaultwarden backup status is not being reported"
+          description: "node-exporter on 10.0.0.25 is down or /opt/vaultwarden/metrics/vaultwarden_backup.prom is missing, so backup failures would go unnoticed."
