@@ -1,5 +1,12 @@
-# Proxmox VE exporter. Config (API token monitoring@pve!prometheus, role PVEAuditor —
-# read-only) comes from the runtime-only Secret monitoring/pve-exporter (key pve.yml).
+# Proxmox VE exporter. Its config is rendered at startup by the Vault agent from
+# secret/proxmox/monitoring (read-only PVEAuditor API token) — no credentials in git or
+# in Kubernetes Secrets. Vault role/policy: pve-exporter (read that one path only).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pve-exporter
+  namespace: monitoring
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,8 +23,20 @@ spec:
     metadata:
       labels:
         app: pve-exporter
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: pve-exporter
+        vault.hashicorp.com/agent-inject-secret-pve.yml: secret/data/proxmox/monitoring
+        vault.hashicorp.com/agent-inject-template-pve.yml: |
+          {{- with secret "secret/data/proxmox/monitoring" -}}
+          default:
+            user: {{ index (.Data.data.token_id | split "!") 0 }}
+            token_name: {{ index (.Data.data.token_id | split "!") 1 }}
+            token_value: {{ .Data.data.token_secret }}
+            verify_ssl: {{ .Data.data.verify_ssl }}
+          {{- end }}
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: pve-exporter   # Vault k8s auth needs its token mounted
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -26,7 +45,7 @@ spec:
       containers:
       - name: pve-exporter
         image: prompve/prometheus-pve-exporter:3.10.1
-        args: ["--config.file=/etc/prometheus/pve.yml"]
+        args: ["--config.file=/vault/secrets/pve.yml"]
         ports:
         - name: http
           containerPort: 9221
@@ -41,15 +60,9 @@ spec:
           readOnlyRootFilesystem: true
           capabilities: {drop: ["ALL"]}
         volumeMounts:
-        - name: config
-          mountPath: /etc/prometheus
-          readOnly: true
         - name: tmp            # python needs a writable tmpdir; root FS stays read-only
           mountPath: /tmp
       volumes:
-      - name: config
-        secret:
-          secretName: pve-exporter
       - name: tmp
         emptyDir:
           sizeLimit: 16Mi
