@@ -170,3 +170,4 @@ resources:
   - manifests/ipam/namespace.yaml
   - manifests/ipam/mariadb.yaml
   - manifests/ipam/phpipam.yaml
+  - manifests/ipam/ipam-sync.yaml

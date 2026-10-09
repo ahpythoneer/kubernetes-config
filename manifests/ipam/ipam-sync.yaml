@@ -1,0 +1,186 @@
+# ipam-sync: copies Proxmox VM names onto phpIPAM addresses by matching NIC MACs.
+# Every connection detail comes from Vault at run time (rendered by the Vault agent into
+# /vault/secrets): secret/proxmox/monitoring and secret/ipam/db via Vault role/policy
+# `ipam-sync` (read-only on exactly those two paths). Nothing secret or site-specific
+# lives in this file.
+#
+# Ownership rules (so hand edits are never overwritten):
+#  - hostname is set only when empty, or changed when the sync set it and the VM was renamed
+#  - description is set only when empty / auto-discovered / just a NIC vendor name
+#  - notes are only written if empty or already owned by the sync (marker below)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ipam-sync
+  namespace: ipam
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ipam-sync-script
+  namespace: ipam
+data:
+  sync.php: |
+    <?php
+    // ipam-sync — Proxmox VM names/MACs -> phpIPAM addresses.
+    $dir    = getenv('SECRETS_DIR') ?: '/vault/secrets';
+    $dryRun = getenv('DRY_RUN') === 'true';
+    $marker = getenv('SYNC_MARKER') ?: '[pve-sync]';
+    // notes written by the first manual sync (2026-10-08) are adopted as sync-owned
+    $legacyPrefix = 'Proxmox VM ';
+
+    function fail($msg) { fwrite(STDERR, "ipam-sync: ERROR: $msg\n"); exit(1); }
+    function load($file) {
+        $raw = @file_get_contents($file);
+        $j = $raw === false ? null : json_decode($raw, true);
+        if (!is_array($j)) fail("cannot read config $file");
+        return $j;
+    }
+
+    $pve = load("$dir/proxmox.json");
+    $db  = load("$dir/ipam-db.json");
+    foreach (['api_url', 'token_id', 'token_secret'] as $k) if (empty($pve[$k])) fail("proxmox config missing $k");
+    $verify = strtolower($pve['verify_ssl'] ?? 'true') !== 'false';
+
+    function pve($path) {
+        global $pve, $verify;
+        $ch = curl_init(rtrim($pve['api_url'], '/') . '/api2/json' . $path);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_HTTPHEADER     => ["Authorization: PVEAPIToken={$pve['token_id']}={$pve['token_secret']}"],
+            CURLOPT_SSL_VERIFYPEER => $verify,
+            CURLOPT_SSL_VERIFYHOST => $verify ? 2 : 0,
+        ]);
+        $body = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        if ($body === false || $code !== 200) fail("Proxmox API $path -> HTTP $code " . curl_error($ch));
+        return json_decode($body, true)['data'] ?? [];
+    }
+
+    // 1. Proxmox: every NIC MAC -> VM
+    $byMac = [];
+    $vmCount = 0;
+    foreach (pve('/cluster/resources?type=vm') as $vm) {
+        $vmCount++;
+        $cfg = pve("/nodes/{$vm['node']}/{$vm['type']}/{$vm['vmid']}/config");
+        foreach ($cfg as $key => $val) {
+            if (!preg_match('/^net\d+$/', $key)) continue;
+            if (!preg_match('/([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})/', (string)$val, $m)) continue;
+            $byMac[strtoupper($m[1])][] = [
+                'vmid' => $vm['vmid'], 'name' => $vm['name'] ?? "vm{$vm['vmid']}",
+                'node' => $vm['node'], 'status' => $vm['status'], 'nic' => $key,
+            ];
+        }
+    }
+
+    // 2. phpIPAM: addresses that have a MAC
+    try {
+        $pdo = new PDO(
+            "mysql:host={$db['host']};port=" . ($db['port'] ?? 3306) . ";dbname={$db['database']};charset=utf8mb4",
+            $db['username'], $db['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    } catch (Exception $e) { fail('phpIPAM DB connection failed: ' . $e->getMessage()); }
+
+    $rows = $pdo->query("SELECT id, INET_NTOA(ip_addr) AS ip, UPPER(mac) AS mac, hostname, description, note
+                         FROM ipaddresses WHERE mac IS NOT NULL AND mac <> ''")->fetchAll(PDO::FETCH_ASSOC);
+    $upd = $pdo->prepare("UPDATE ipaddresses SET hostname = ?, description = ?, note = ? WHERE id = ?");
+
+    $owned = function ($note) use ($marker, $legacyPrefix) {
+        return $note === null || $note === '' || strpos($note, $marker) === 0 || strpos($note, $legacyPrefix) === 0;
+    };
+    $isGenericDesc = function ($d) {
+        return $d === null || $d === '' || stripos($d, '-- autodiscovered') === 0
+            || stripos($d, 'Proxmox Server Solutions') === 0 || stripos($d, 'discovered by ARP') === 0;
+    };
+
+    $changed = 0; $matched = 0; $seenMacs = [];
+    foreach ($rows as $r) {
+        if (empty($byMac[$r['mac']])) continue;
+        $seenMacs[$r['mac']] = true;
+        $matched++;
+        if (!$owned($r['note'])) continue;              // a human (or another tool) owns this note
+        $vm = $byMac[$r['mac']][0];
+        $note = sprintf('%s VM %d %s on %s (%s), %s', $marker, $vm['vmid'], $vm['name'], $vm['node'], $vm['nic'], $vm['status']);
+
+        $host = $r['hostname'];
+        if ($host === null || $host === '') {
+            $host = $vm['name'];
+        } elseif ($r['note'] && preg_match('/VM \d+ (\S+) on /', $r['note'], $m) && strcasecmp($m[1], $host) === 0 && $vm['name'] !== $host) {
+            $host = $vm['name'];                        // the sync named it; the VM was renamed since
+        }
+        $desc = $isGenericDesc($r['description']) ? "Proxmox VM {$vm['vmid']}" : $r['description'];
+
+        if ($host === $r['hostname'] && $desc === $r['description'] && $note === $r['note']) continue;
+        printf("  %-15s host '%s' -> '%s'%s\n", $r['ip'], (string)$r['hostname'], $host, $note !== $r['note'] ? ' (note updated)' : '');
+        if (!$dryRun) $upd->execute([$host, $desc, $note, $r['id']]);
+        $changed++;
+    }
+
+    $unmatched = [];
+    foreach ($byMac as $mac => $vms) if (empty($seenMacs[$mac])) foreach ($vms as $v) $unmatched[] = "{$v['vmid']} {$v['name']} ({$v['status']})";
+
+    printf("ipam-sync: %d VMs, %d NICs, %d IPAM addresses matched, %d %s%s\n",
+        $vmCount, count($byMac), $matched, $changed, $dryRun ? 'would change' : 'changed', $dryRun ? ' [DRY RUN]' : '');
+    if ($unmatched) echo "  VM NICs with no IPAM address (stopped, or outside scanned ranges): " . implode(', ', $unmatched) . "\n";
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ipam-sync
+  namespace: ipam
+spec:
+  schedule: "*/30 * * * *"
+  timeZone: America/Chicago
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            app: ipam-sync
+          annotations:
+            vault.hashicorp.com/agent-inject: "true"
+            vault.hashicorp.com/agent-pre-populate-only: "true"   # init-only so the Job can finish
+            vault.hashicorp.com/role: ipam-sync
+            vault.hashicorp.com/agent-inject-secret-proxmox.json: secret/data/proxmox/monitoring
+            vault.hashicorp.com/agent-inject-template-proxmox.json: |
+              {{- with secret "secret/data/proxmox/monitoring" -}}{{ .Data.data | toJSON }}{{- end }}
+            vault.hashicorp.com/agent-inject-secret-ipam-db.json: secret/data/ipam/db
+            vault.hashicorp.com/agent-inject-template-ipam-db.json: |
+              {{- with secret "secret/data/ipam/db" -}}{{ .Data.data | toJSON }}{{- end }}
+        spec:
+          serviceAccountName: ipam-sync
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: sync
+            image: phpipam/phpipam-cron:v1.8.3     # same image the scan agent runs (php + pdo_mysql + curl)
+            command: ["php", "/scripts/sync.php"]
+            env:
+            - name: DRY_RUN
+              value: "true"     # first deploy: report only; flip to "false" after reviewing a run
+            - name: SYNC_MARKER
+              value: "[pve-sync]"
+            resources:
+              requests: {cpu: 10m, memory: 32Mi}
+              limits: {memory: 128Mi}
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: ["ALL"]}
+            volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+          volumes:
+          - name: script
+            configMap:
+              name: ipam-sync-script
