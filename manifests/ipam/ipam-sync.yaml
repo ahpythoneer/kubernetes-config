@@ -105,8 +105,10 @@ data:
         $host = $r['hostname'];
         if ($host === null || $host === '') {
             $host = $vm['name'];
-        } elseif ($r['note'] && preg_match('/VM \d+ (\S+) on /', $r['note'], $m) && strcasecmp($m[1], $host) === 0 && $vm['name'] !== $host) {
-            $host = $vm['name'];                        // the sync named it; the VM was renamed since
+        } elseif ($r['note'] && preg_match('/VM \d+ (\S+) on /', $r['note'], $m)
+                  && $m[1] === $host                      // exactly the name the sync recorded...
+                  && strcasecmp($vm['name'], $host) !== 0) { // ...and the VM was really renamed (not just re-cased)
+            $host = $vm['name'];
         }
         $desc = $isGenericDesc($r['description']) ? "Proxmox VM {$vm['vmid']}" : $r['description'];
 
