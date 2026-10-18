@@ -99,6 +99,8 @@ spec:
         args:
         # secrets/configmaps are listed only for metadata metrics; keep their labels out
         - --metric-labels-allowlist=pods=[app]
+        # lets Prometheus spot pods that asked for Vault injection but have no vault-agent
+        - --metric-annotations-allowlist=pods=[vault.hashicorp.com/agent-inject]
         ports:
         - name: http-metrics
           containerPort: 8080

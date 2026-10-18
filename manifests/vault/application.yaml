@@ -33,7 +33,36 @@ spec:
         
         injector:
           enabled: true
-          replicas: 1
+          # 2 replicas (chart default anti-affinity puts one on each worker) + PDB, so a kured
+          # reboot or drain never leaves the cluster without an injector.
+          replicas: 2
+          podDisruptionBudget:
+            maxUnavailable: 1
+          webhook:
+            # Fail = a pod that should get Vault secrets waits (the ReplicaSet retries) instead of
+            # starting without its vault-agent sidecar, which is what broke pve-exporter + ollama
+            # on the 2026-10-18 kured reboot. Because Fail blocks every pod the webhook matches,
+            # it is scoped to ONLY the namespaces that use injection — never kube-system, cilium,
+            # harbor (the image mirror), argocd, vault, alertmanager...
+            # >>> A new app using vault.hashicorp.com/agent-inject must be added to this list. <<<
+            # (The VaultInjectionMissing alert fires if one is forgotten.)
+            failurePolicy: Fail
+            namespaceSelector:
+              matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: [browser-service, code-server, grafana, heimdall, hermes-agent, ipam,
+                         joplin, monitoring, ollama, prometheus, research-worker, vaultwarden]
+            # Chart default (never the injector itself), plus the non-Vault workloads that share
+            # those namespaces, so they keep starting even if the injector is down.
+            objectSelector: |
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: NotIn
+                values: [{{ template "vault.name" . }}-agent-injector]
+              - key: app
+                operator: NotIn
+                values: [kube-state-metrics, node-exporter, phpipam-web, phpipam-cron, phpipam-db]
   
   destination:
     server: https://kubernetes.default.svc
