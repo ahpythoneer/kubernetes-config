@@ -38,6 +38,13 @@ spec:
           replicas: 2
           podDisruptionBudget:
             maxUnavailable: 1
+          # Only 2 schedulable workers + required anti-affinity: a surge pod could never schedule,
+          # so roll by replacing one replica at a time (the other keeps serving the webhook).
+          strategy:
+            type: RollingUpdate
+            rollingUpdate:
+              maxSurge: 0
+              maxUnavailable: 1
           webhook:
             # Fail = a pod that should get Vault secrets waits (the ReplicaSet retries) instead of
             # starting without its vault-agent sidecar, which is what broke pve-exporter + ollama
