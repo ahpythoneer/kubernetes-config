@@ -30,6 +30,8 @@ SECRETS = "/vault/secrets"
 STATE_FILE = os.environ.get("STATE_FILE", "/app/state/state.json")
 PRIMARY = (os.environ["PRIMARY_LLM_URL"], os.environ["PRIMARY_MODEL"])
 FALLBACK = (os.environ["FALLBACK_LLM_URL"], os.environ["FALLBACK_MODEL"])
+# intent routing: the small model is fast (<1 s) and scored 15/15 in tests; big model as fallback
+ROUTERS = (FALLBACK, PRIMARY)
 RUNNER = os.environ.get("RUNNER_URL", "http://claude-runner.code-server.svc:8787")
 FORGEJO = os.environ.get("FORGEJO_URL", "https://git.racktocloud.com")
 REPO = os.environ.get("FORGEJO_REPO", "homelab/ops")
@@ -221,8 +223,10 @@ TOOLS = {
                     "issue": {"type": "integer", "description": "related homelab/ops issue number, if any"},
                     "wants_change": {"type": "boolean"}}, ["task"]),
 }
+# ask_claude is NOT offered to the chat model: work is dispatched by route() in code, so the
+# model can never "say" it started a job without one existing (it did exactly that on 2026-11-14).
 TOOL_SPECS = [{"type": "function", "function": {"name": n, "description": d, "parameters": {"type": "object", "properties": p, "required": r}}}
-              for n, (_, d, p, r) in TOOLS.items()]
+              for n, (_, d, p, r) in TOOLS.items() if n != "ask_claude"]
 
 
 # ---------------------------------------------------------------- LLM
@@ -263,6 +267,71 @@ def chat(text):
                 result = {"error": str(e)}
             messages.append({"role": "tool", "content": json.dumps(result)[:12000]})
     return "I went in circles with my tools; please rephrase or be more specific."
+
+
+# ---------------------------------------------------------------- routing (decided by code, not by the chat model)
+ROUTE_SCHEMA = {"type": "object", "required": ["intent", "task", "issue"], "properties": {
+    "intent": {"type": "string", "enum": ["change", "investigate", "job_status", "issues", "chat"]},
+    "task": {"type": "string"}, "issue": {"type": ["integer", "null"]}}}
+ROUTE_PROMPT = """Classify the user's latest message for a homelab chat-ops bot. Reply with JSON only.
+intent:
+- "issues": anything about the issue tracker itself: list/show/search issues, file/create/open
+  a bug, idea or chore, comment on, label, close or reopen an issue. These are NOT changes.
+- "change": the user wants something DONE to the cluster, git repo, a service or a config:
+  restart, deploy, fix, upgrade, roll back, scale, edit, delete or create a resource, apply,
+  rotate. (Filing or closing an issue is "issues", not "change".)
+- "investigate": the user wants an explanation that needs digging into the cluster or repo:
+  why is X failing / restarting / slow, what changed, look into X, debug X, check X in detail.
+- "job_status": the user asks about the progress or result of work already requested
+  ("is it done?", "status of the restart?", "checking up on that", "did it work?").
+- "chat": everything else: greetings, quick cluster health ("how's the cluster?", "any alerts?"), general questions.
+task: for change/investigate, a complete self-contained instruction for an engineer, resolving
+references from the conversation (e.g. "do that" -> what "that" is). Otherwise "".
+issue: the homelab/ops issue number if the user mentions or clearly refers to one, else null."""
+
+
+def route(text):
+    context = [{"role": m["role"], "content": m["content"][:600]} for m in HIST[-6:] if m["role"] in ("user", "assistant")]
+    for url, model in ROUTERS:
+        try:
+            r = http("POST", f"{url}/api/chat", {"model": model, "stream": False, "format": ROUTE_SCHEMA, "keep_alive": "30m",
+                                                 "options": {"temperature": 0},
+                                                 "messages": [{"role": "system", "content": ROUTE_PROMPT}] + context + [{"role": "user", "content": text}]}, timeout=120)
+            out = json.loads(r["message"]["content"])
+            log.info("route %s/%s: %s issue=%s", model, out.get("intent"), text[:80], out.get("issue"))
+            return out
+        except Exception as e:  # noqa: BLE001
+            log.warning("router %s failed: %s", model, e)
+    return {"intent": "chat", "task": "", "issue": None}
+
+
+def job_status_text():
+    lines = []
+    for pid, p in STATE["plans"].items():
+        lines.append(f"⏳ Plan for #{p['issue']} is waiting for your Approve/Reject (scroll up to the 📋 message).")
+    try:
+        jobs = runner("GET", "/v1/jobs")
+    except Exception as e:  # noqa: BLE001
+        return f"I can't reach the Claude runner right now ({e})."
+    for j in jobs[-6:]:
+        icon = {"queued": "🕐", "running": "🔧", "done": "✅", "failed": "❌", "timeout": "⌛", "cancelled": "🚫"}.get(j["status"], "•")
+        lines.append(f"{icon} {j['mode']} job {j['id']} on #{j['issue']}: {j['status']}")
+    return "\n".join(lines) or "No Claude jobs or pending plans right now. Nothing has been started."
+
+
+# replies that claim actions/results are only allowed to come from job results, never from chat
+CLAIM = re.compile(r"(asked|handed|passed|sent).{0,20}claude|claude( code)? (is|has|reports|reported|will|says|said|finished|completed)|"
+                   r"successfully (restarted|deployed|applied|rolled|scaled|upgraded|updated|deleted)|"
+                   r"\b(i('ve| have)|has been|was) (restarted|deployed|applied|rolled back|scaled|upgraded)", re.I)
+
+
+def guarded(reply):
+    if CLAIM.search(reply):
+        log.warning("blocked an unfounded action claim: %s", reply[:200])
+        return ("I can't do or check work from plain chat, and I haven't started anything. "
+                "Tell me directly what you want done (e.g. \"restart clipdrop\") and I'll hand it to Claude for a plan, "
+                "or ask \"status of my jobs\".")
+    return reply
 
 
 # ---------------------------------------------------------------- Claude jobs
@@ -396,7 +465,22 @@ def handle(update):
     if text.startswith("/") and cmd(text) is not None:
         return
     tg("sendChatAction", chat_id=ALLOWED, action="typing")
-    say(chat(text))
+    r = route(text)
+    intent, issue = r.get("intent"), r.get("issue")
+    if intent in ("change", "investigate"):
+        task = (r.get("task") or text) + f"\n\nThe user's exact words: {text}"
+        res = t_ask_claude(task, issue, wants_change=(intent == "change"))
+        reply = (f"📝 On it: Claude is drafting a plan for #{res['issue']} (job {res['job']}). You'll get Approve/Reject buttons here; nothing changes before you approve."
+                 if intent == "change" else
+                 f"🔎 Claude is looking into it read-only (#{res['issue']}, job {res['job']}). The answer will arrive here in a few minutes.")
+    elif intent == "job_status":
+        reply = job_status_text()
+    else:
+        reply = guarded(chat(text))
+        return say(reply)
+    HIST.extend([{"role": "user", "content": text}, {"role": "assistant", "content": reply}])
+    del HIST[:-HISTORY]
+    say(reply)
 
 
 def main():
