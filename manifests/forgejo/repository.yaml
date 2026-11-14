@@ -1,0 +1,13 @@
+# Forgejo publishes its Helm chart as an OCI artifact. Public, no credentials.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repo-forgejo-helm
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  name: forgejo-helm
+  type: helm
+  url: code.forgejo.org/forgejo-helm
+  enableOCI: "true"

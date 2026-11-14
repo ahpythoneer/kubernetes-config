@@ -1,0 +1,103 @@
+# Forgejo: self-hosted git + issue tracker at https://git.racktocloud.com (LAN-only: the DNS
+# record points at the private ingress IP 10.0.0.150; TLS from letsencrypt-prod via Cloudflare DNS01).
+#
+# Runtime Secrets in namespace forgejo (NOT in git, created by a one-time bootstrap 2026-11-14):
+#   forgejo-db     password  -> role "forgejo" on the shared Postgres (database "forgejo")
+#   forgejo-admin  username/password -> initial admin "administrator" (set once, never reset by the chart)
+# Data: issues/users/etc. live in Postgres (covered by databases/postgresql-backup);
+#       git repositories live on the PVC.
+# Self-registration is off and sign-in is required to view anything.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: code.forgejo.org/forgejo-helm
+    chart: forgejo
+    targetRevision: "17.3.2"
+    helm:
+      releaseName: forgejo
+      values: |
+        strategy:
+          type: Recreate                # RWO volume
+        resources:
+          requests: {cpu: 100m, memory: 256Mi}
+          limits: {memory: 1Gi}
+        persistence:
+          enabled: true
+          size: 10Gi
+          storageClass: nfs-storage
+        service:
+          ssh:
+            type: ClusterIP             # git over SSH not exposed (HTTPS + tokens only)
+        ingress:
+          enabled: true
+          className: nginx
+          annotations:
+            cert-manager.io/cluster-issuer: letsencrypt-prod
+            nginx.ingress.kubernetes.io/ssl-redirect: "true"
+            nginx.ingress.kubernetes.io/proxy-body-size: 512m
+          hosts:
+          - host: git.racktocloud.com
+            paths:
+            - path: /
+              pathType: Prefix
+          tls:
+          - secretName: forgejo-tls
+            hosts: [git.racktocloud.com]
+        test:
+          enabled: false
+        gitea:
+          admin:
+            existingSecret: forgejo-admin
+            email: administrator@racktocloud.com
+            passwordMode: initialOnlyNoReset
+          additionalConfigFromEnvs:
+          - name: FORGEJO__DATABASE__PASSWD
+            valueFrom:
+              secretKeyRef: {name: forgejo-db, key: password}
+          config:
+            APP_NAME: Racktocloud Forge
+            server:
+              DOMAIN: git.racktocloud.com
+              ROOT_URL: https://git.racktocloud.com/
+              DISABLE_SSH: true
+            database:
+              DB_TYPE: postgres
+              HOST: postgresql.databases.svc:5432
+              NAME: forgejo
+              USER: forgejo
+              SSL_MODE: disable
+            service:
+              DISABLE_REGISTRATION: true
+              REQUIRE_SIGNIN_VIEW: true
+            repository:
+              DEFAULT_PRIVATE: private
+            cache:
+              ADAPTER: memory
+            session:
+              PROVIDER: db
+            queue:
+              TYPE: level
+            mailer:
+              ENABLED: false
+            security:
+              INSTALL_LOCK: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgejo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

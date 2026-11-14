@@ -66,6 +66,10 @@ resources:
   - manifests/postgresql/application.yaml
   - manifests/postgresql/backup.yaml
 
+  # Forgejo (git + issue tracker, LAN-only)
+  - manifests/forgejo/repository.yaml
+  - manifests/forgejo/application.yaml
+
   # Harbor Container Registry
   - manifests/harbor/namespace.yaml
   - manifests/harbor/application.yaml
