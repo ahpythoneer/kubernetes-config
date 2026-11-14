@@ -1,0 +1,13 @@
+# Bitnami publishes its charts as OCI artifacts on Docker Hub. Public, no credentials.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repo-bitnamicharts
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  name: bitnamicharts
+  type: helm
+  url: registry-1.docker.io/bitnamicharts
+  enableOCI: "true"

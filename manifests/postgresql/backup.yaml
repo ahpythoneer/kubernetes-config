@@ -1,0 +1,102 @@
+# Nightly logical backup of the shared PostgreSQL (databases/postgresql).
+#   /backups/<UTC timestamp>/globals.sql   roles without passwords (pg_dumpall --globals-only)
+#   /backups/<UTC timestamp>/<db>.dump     each database, pg_dump custom format
+# A run is written to <ts>.partial and renamed only when every dump has been verified with
+# pg_restore --list, so a directory without .partial is a complete backup. 14 days are kept.
+# Role passwords are not dumped: they live in Vault (secret/databases/postgresql, app secrets).
+# Alerts: PostgresBackupStale / JobFailed (manifests/prometheus/rules.yaml).
+#
+# Restore one database (from a pod with the backup PVC mounted, e.g. a debug copy of this job):
+#   pg_restore -h postgresql.databases.svc -U postgres --clean --if-exists -d <db> /backups/<ts>/<db>.dump
+# Into a fresh server, create the roles first:  psql -h ... -U postgres -f /backups/<ts>/globals.sql
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-backups
+  namespace: databases
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: nfs-storage
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgresql-backup
+  namespace: databases
+spec:
+  schedule: "30 2 * * *"
+  timeZone: America/Chicago
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app: postgresql-backup
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            fsGroup: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: backup
+            # same pinned image as the server, so pg_dump matches the server's major version
+            image: registry-1.docker.io/bitnami/postgresql@sha256:d80128c86146ef35185682c08594b560cbb0dab39a3feabedffa820e1b54687c
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: PGHOST
+              value: postgresql.databases.svc
+            - name: PGUSER
+              value: postgres
+            - name: RETENTION_DAYS
+              value: "14"
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+              set -euo pipefail
+              export PGPASSWORD="$(cat /secrets/postgres-password)"
+              ts=$(date -u +%Y%m%dT%H%M%SZ)
+              out=/backups/$ts.partial
+              mkdir -p "$out"
+              pg_dumpall --globals-only --no-role-passwords > "$out/globals.sql"
+              for db in $(psql -d postgres -At -c "select datname from pg_database where not datistemplate order by 1"); do
+                pg_dump -Fc -d "$db" -f "$out/$db.dump"
+                pg_restore --list "$out/$db.dump" > /dev/null
+                echo "$db: $(du -h "$out/$db.dump" | cut -f1)"
+              done
+              mv "$out" "/backups/$ts"
+              find /backups -mindepth 1 -maxdepth 1 -type d -name '*.partial' -mmin +120 -exec rm -rf {} +
+              find /backups -mindepth 1 -maxdepth 1 -type d -mtime +"$RETENTION_DAYS" -exec rm -rf {} +
+              echo "backup $ts complete; kept: $(ls /backups | wc -l), total $(du -sh /backups | cut -f1)"
+            resources:
+              requests: {cpu: 50m, memory: 64Mi}
+              limits: {memory: 512Mi}
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: ["ALL"]}
+            volumeMounts:
+            - {name: backups, mountPath: /backups}
+            - {name: secret, mountPath: /secrets, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+          volumes:
+          - name: backups
+            persistentVolumeClaim:
+              claimName: postgresql-backups
+          - name: secret
+            secret:
+              secretName: postgresql
+              items:
+              - {key: postgres-password, path: postgres-password}
+          - name: tmp
+            emptyDir: {}

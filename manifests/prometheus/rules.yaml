@@ -292,6 +292,15 @@ data:
           summary: "No successful Vaultwarden backup for over 26 hours"
           description: "Last success was {{ $value | humanizeDuration }} ago. The cron job may not be running (check crontab -l and /opt/vaultwarden/backup.log on 10.0.0.25)."
 
+      - alert: PostgresBackupStale
+        expr: time() - max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="databases",cronjob="postgresql-backup"}) > 93600
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No successful PostgreSQL backup for over 26 hours"
+          description: "CronJob databases/postgresql-backup last succeeded {{ $value | humanizeDuration }} ago. Check: kubectl -n databases get jobs; kubectl -n databases logs job/<latest>"
+
       - alert: VaultwardenBackupMetricsMissing
         expr: absent(vaultwarden_backup_last_success_timestamp_seconds)
         for: 30m

@@ -1,0 +1,48 @@
+# Shared PostgreSQL (databases/postgresql, postgresql.databases.svc:5432). Installed by hand with
+# Helm on 2026-04-12 and adopted by ArgoCD on 2026-11-14 with the same chart version and values.
+#
+# - Image is pinned by DIGEST. Bitnami's chart defaults to bitnami/postgresql:latest, and a jump
+#   to a new PostgreSQL major would leave the pod unable to start on the old data directory.
+#   Major upgrades must be planned: dump -> new major -> restore.
+#   sha256:d80128c8... = PostgreSQL 18.7
+# - Password: the chart reads the existing runtime Secret databases/postgresql (key
+#   postgres-password), which is NOT in git. The source of truth is Vault secret/databases/postgresql.
+# - Backups: manifests/postgresql/backup.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: postgresql
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: registry-1.docker.io/bitnamicharts
+    chart: postgresql
+    targetRevision: "18.5.16"
+    helm:
+      releaseName: postgresql
+      values: |
+        image:
+          digest: sha256:d80128c86146ef35185682c08594b560cbb0dab39a3feabedffa820e1b54687c
+          pullPolicy: IfNotPresent
+        auth:
+          existingSecret: postgresql
+        primary:
+          persistence:
+            size: 10Gi
+            storageClassName: nfs-storage
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: databases
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

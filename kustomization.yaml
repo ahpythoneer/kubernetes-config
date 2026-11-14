@@ -61,6 +61,11 @@ resources:
   - manifests/vault/application.yaml
   - manifests/vault/unsealer.yaml
 
+  # Shared PostgreSQL (Helm chart via ArgoCD) + nightly backup
+  - manifests/postgresql/repository.yaml
+  - manifests/postgresql/application.yaml
+  - manifests/postgresql/backup.yaml
+
   # Harbor Container Registry
   - manifests/harbor/namespace.yaml
   - manifests/harbor/application.yaml
