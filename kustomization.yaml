@@ -25,6 +25,7 @@ resources:
   - manifests/code-server/namespace.yaml
   - manifests/code-server/deployment.yaml
   - manifests/code-server/ingress.yaml
+  - manifests/code-server/claude-runner.yaml
 
   # Grafana
   - manifests/grafana/namespace.yaml
@@ -180,3 +181,12 @@ resources:
   - manifests/ipam/mariadb.yaml
   - manifests/ipam/phpipam.yaml
   - manifests/ipam/ipam-sync.yaml
+
+# claude-runner code (homelab/ops#19); the content hash in the name rolls code-server on change
+configMapGenerator:
+- name: claude-runner
+  namespace: code-server
+  files:
+  - manifests/code-server/runner/server.js
+  - manifests/code-server/runner/rules.md
+  - manifests/code-server/runner/toolbox.js

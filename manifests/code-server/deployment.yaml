@@ -59,6 +59,16 @@ spec:
           {{- with secret "secret/data/code-server" -}}
           export PASSWORD="{{ .Data.data.password }}"
           {{- end }}
+        # claude-runner credentials (homelab/ops#19): raw values, one file each
+        vault.hashicorp.com/agent-inject-secret-claude-token: secret/data/chatops/claude
+        vault.hashicorp.com/agent-inject-template-claude-token: |
+          {{- with secret "secret/data/chatops/claude" -}}{{ .Data.data.oauth_token }}{{- end -}}
+        vault.hashicorp.com/agent-inject-secret-github-token: secret/data/chatops/github
+        vault.hashicorp.com/agent-inject-template-github-token: |
+          {{- with secret "secret/data/chatops/github" -}}{{ .Data.data.token }}{{- end -}}
+        vault.hashicorp.com/agent-inject-secret-runner-token: secret/data/chatops/runner
+        vault.hashicorp.com/agent-inject-template-runner-token: |
+          {{- with secret "secret/data/chatops/runner" -}}{{ .Data.data.token }}{{- end -}}
     spec:
       securityContext:
         runAsUser: 1000
@@ -66,7 +76,42 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+      # pinned + checksum-verified Claude Code and kubectl, cached on the volume
+      - name: chatops-toolbox
+        image: codercom/code-server@sha256:09565f9e07f5624554e295e8bab0e2fec4a7c533eb3cff459ed6596a4d3d7c1c
+        command: ["/usr/lib/code-server/lib/node", "/runner/toolbox.js"]
+        env:
+        - {name: CLAUDE_VERSION, value: "2.1.325"}
+        - {name: CLAUDE_SHA256, value: 0dc4f4a9a165fc60746d7ae8489712e5fc352f1e7ad4eb22e7141bd0812eb0cf}
+        - {name: KUBECTL_VERSION, value: v1.36.5}
+        - {name: KUBECTL_SHA256, value: 33bc88a24c3b09cf55bfd59e6ca977881b61fc3f25ab65bc80c65b430248648e}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities: {drop: ["ALL"]}
+        volumeMounts:
+        - {name: code-server-data, mountPath: /home/coder}
+        - {name: claude-runner, mountPath: /runner, readOnly: true}
       containers:
+      - name: claude-runner
+        image: codercom/code-server@sha256:09565f9e07f5624554e295e8bab0e2fec4a7c533eb3cff459ed6596a4d3d7c1c
+        command: ["/usr/lib/code-server/lib/node", "/runner/server.js"]
+        env:
+        - {name: CLAUDE_VERSION, value: "2.1.325"}
+        ports:
+        - {name: runner, containerPort: 8787}
+        readinessProbe:
+          httpGet: {path: /healthz, port: runner}
+          periodSeconds: 20
+        resources:
+          requests: {cpu: 100m, memory: 256Mi}
+          limits: {memory: 2Gi}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities: {drop: ["ALL"]}
+        volumeMounts:
+        - {name: code-server-data, mountPath: /home/coder}
+        - {name: claude-runner, mountPath: /runner, readOnly: true}
       - name: code-server
         # pinned (was :latest); 4.145.2. Bump deliberately.
         image: codercom/code-server@sha256:09565f9e07f5624554e295e8bab0e2fec4a7c533eb3cff459ed6596a4d3d7c1c
@@ -93,6 +138,9 @@ spec:
             memory: 1Gi
             cpu: 1000m
       volumes:
+      - name: claude-runner
+        configMap:
+          name: claude-runner
       - name: code-server-data
         persistentVolumeClaim:
           claimName: code-server-storage
