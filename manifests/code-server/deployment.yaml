@@ -42,6 +42,9 @@ metadata:
   namespace: code-server
 spec:
   replicas: 1
+  # never two pods at once: they would share one git workspace and the runner queue is in memory
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: code-server
