@@ -56,9 +56,22 @@ spec:
         vault.hashicorp.com/agent-inject-template-code-server: '{{- with secret "secret/data/code-server"
           -}}\nexport PASSWORD="{{ .Data.data.password }}"\n{{- end }}'
     spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: code-server
-        image: codercom/code-server:latest
+        # pinned (was :latest); 4.145.2. Bump deliberately.
+        image: codercom/code-server@sha256:09565f9e07f5624554e295e8bab0e2fec4a7c533eb3cff459ed6596a4d3d7c1c
+        # The image gives user "coder" passwordless sudo. no_new_privs makes sudo unusable, so the IDE
+        # (and the Claude runner that will live here, issue #19) can't become root.
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
         ports:
         - containerPort: 8443
         env: null
