@@ -53,8 +53,12 @@ spec:
         vault.hashicorp.com/agent-inject: 'true'
         vault.hashicorp.com/role: code-server
         vault.hashicorp.com/agent-inject-secret-code-server: secret/data/code-server
-        vault.hashicorp.com/agent-inject-template-code-server: '{{- with secret "secret/data/code-server"
-          -}}\nexport PASSWORD="{{ .Data.data.password }}"\n{{- end }}'
+        # Block scalar on purpose: the old single-quoted string kept "\n" literally, so the rendered
+        # file was one line ("\nexport PASSWORD=...") and the password never reached code-server.
+        vault.hashicorp.com/agent-inject-template-code-server: |
+          {{- with secret "secret/data/code-server" -}}
+          export PASSWORD="{{ .Data.data.password }}"
+          {{- end }}
     spec:
       securityContext:
         runAsUser: 1000
@@ -72,9 +76,12 @@ spec:
           allowPrivilegeEscalation: false
           capabilities:
             drop: ["ALL"]
+        # Load the Vault-rendered PASSWORD (it overrides config.yaml), then the image's own entrypoint.
+        command: ["/bin/sh", "-c"]
+        args:
+        - set -a && . /vault/secrets/code-server && set +a && exec /usr/bin/entrypoint.sh --bind-addr 0.0.0.0:8080 .
         ports:
-        - containerPort: 8443
-        env: null
+        - containerPort: 8080
         volumeMounts:
         - name: code-server-data
           mountPath: /home/coder
