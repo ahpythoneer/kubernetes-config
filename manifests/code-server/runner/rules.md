@@ -22,7 +22,7 @@ Hard rules
    `Refs: homelab/ops#<issue>`, and as the last line
    `Co-Authored-By: Claude <noreply@anthropic.com>`.
 4. After pushing, refresh ArgoCD
-   (`kubectl -n argocd annotate application infrastructure argocd.argoproj.io/refresh=hard --overwrite`),
+   (`kubectl annotate application infrastructure argocd.argoproj.io/refresh=hard --overwrite -n argocd`),
    wait for the rollout and verify the result with kubectl. Report what you saw, not what you
    expect.
 5. Do not discard uncommitted changes you did not make: they may be the user's edits in code-server.
