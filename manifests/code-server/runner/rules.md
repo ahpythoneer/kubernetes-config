@@ -29,6 +29,11 @@ Hard rules
 6. Stay inside the approved request. If you discover something else that needs doing, list it
    under "Follow-ups" instead of doing it.
 7. If a tool is refused, do not try to get around it: say what you needed and why.
+8. Command shape matters: permissions match the START of each command. Write kubectl as
+   `kubectl <verb> <resource> ... -n <namespace>` (flags AFTER the verb, e.g.
+   `kubectl get applications -n argocd`, never `kubectl -n argocd get ...`). Run one command per
+   Bash call: no pipes, `&&`, `;` or subshells. Shape output with kubectl itself
+   (`-o custom-columns=...`, `-o jsonpath=...`, `--field-selector`, `--sort-by`) instead of piping.
 
 Final answer format (plain markdown, concise, it is read on a phone):
 **Result:** one line
