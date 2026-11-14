@@ -31,6 +31,11 @@ spec:
           persistence:
             size: 10Gi
             storageClassName: nfs-storage
+          # explicit resources replace the chart's "nano" preset (192Mi / 150m CPU limit), which
+          # OOM-killed Postgres during a REINDEX on 2026-11-14 and throttled it the rest of the time
+          resources:
+            requests: {cpu: 250m, memory: 512Mi, ephemeral-storage: 50Mi}
+            limits: {memory: 2Gi, ephemeral-storage: 2Gi}
   destination:
     server: https://kubernetes.default.svc
     namespace: databases
