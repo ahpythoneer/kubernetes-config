@@ -200,7 +200,9 @@ http.createServer((req, res) => {
     return send(res, 200, [...jobs.values()].slice(-20).map((j) => ({ id: j.id, mode: j.mode, issue: j.issue, status: j.status, created: j.created })));
   }
   if (req.method === 'GET' && id) {
-    const j = jobs.get(id);
+    let j = jobs.get(id);
+    // finished jobs survive a runner restart as their record on the volume
+    if (!j && fs.existsSync(`${JOB_DIR}/${id}.json`)) j = JSON.parse(fs.readFileSync(`${JOB_DIR}/${id}.json`, 'utf8'));
     return j ? send(res, 200, view(j, Number(url.searchParams.get('since') || 0))) : send(res, 404, { error: 'no such job' });
   }
   if (req.method === 'POST' && id && cancel) {

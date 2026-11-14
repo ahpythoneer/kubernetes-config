@@ -135,7 +135,6 @@ resources:
   # Hermes Agent — AI Orchestrator
   - manifests/hermes-agent/namespace.yaml
   - manifests/hermes-agent/rbac.yaml
-  - manifests/hermes-agent/configmap.yaml
   - manifests/hermes-agent/deployment.yaml
 
   # Chill Farm — only-chill.com static site
@@ -190,3 +189,9 @@ configMapGenerator:
   - manifests/code-server/runner/server.js
   - manifests/code-server/runner/rules.md
   - manifests/code-server/runner/toolbox.js
+# Hermes chat-ops agent code (homelab/ops#19)
+- name: hermes-app
+  namespace: hermes-agent
+  files:
+  - manifests/hermes-agent/app/hermes.py
+  - manifests/hermes-agent/app/SOUL.md
