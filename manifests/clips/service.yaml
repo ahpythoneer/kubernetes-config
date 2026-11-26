@@ -12,3 +12,24 @@ spec:
   - name: http
     port: 80
     targetPort: http
+---
+# Internal-only metrics for Prometheus (homelab/ops#28). Deliberately a separate Service
+# that no Ingress points at: clips.racktocloud.com is public through the Cloudflare tunnel.
+apiVersion: v1
+kind: Service
+metadata:
+  name: clipdrop-metrics
+  namespace: clips
+  labels:
+    app: clipdrop
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9464"
+    prometheus.io/path: /metrics
+spec:
+  selector:
+    app: clipdrop
+  ports:
+  - name: metrics
+    port: 9464
+    targetPort: metrics

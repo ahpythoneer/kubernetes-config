@@ -19,7 +19,7 @@ spec:
         app: clipdrop
       annotations:
         # bump to force a rollout when the source ConfigMap changes
-        clipdrop/src-rev: "9"
+        clipdrop/src-rev: "10"
     spec:
       initContainers:
       # make the NFS-backed data dir writable by the non-root app (uid 1000)
@@ -58,6 +58,9 @@ spec:
         ports:
         - name: http
           containerPort: 8080
+          protocol: TCP
+        - name: metrics        # Prometheus only (Service clipdrop-metrics), never via the ingress
+          containerPort: 9464
           protocol: TCP
         volumeMounts:
         - name: src

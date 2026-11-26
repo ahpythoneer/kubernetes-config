@@ -309,3 +309,60 @@ data:
         annotations:
           summary: "Vaultwarden backup status is not being reported"
           description: "node-exporter on 10.0.0.25 is down or /opt/vaultwarden/metrics/vaultwarden_backup.prom is missing, so backup failures would go unnoticed."
+
+    # ---------------------------------------------------------------- clipdrop (homelab/ops#28)
+    # From 2026-11-19 to 11-25 every crawl "succeeded" while verifying 1 of 112 coupon pages
+    # (Great Clips changed the date format); nothing alerted. These rules catch that class of break.
+    - name: clipdrop
+      rules:
+      - alert: ClipDropVerificationBroken
+        expr: clipdrop_last_crawl_pages_no_date > 0.5 * clipdrop_last_crawl_pages_fetched and clipdrop_last_crawl_pages_fetched >= 10   # value = pages without a date
+        labels:
+          severity: warning
+        annotations:
+          summary: "ClipDrop can't read coupon end dates any more"
+          description: "{{ $value }} of the coupon pages fetched in the last crawl loaded but had no readable end date. Great Clips probably changed the offers.greatclips.com page format: compare a page with parseOfferPage() in crawler.js."
+
+      - alert: ClipDropCouponPagesFailing
+        expr: clipdrop_last_crawl_pages_errors > 0.5 * clipdrop_last_crawl_pages_fetched and clipdrop_last_crawl_pages_fetched >= 10   # value = failed pages
+        labels:
+          severity: warning
+        annotations:
+          summary: "ClipDrop's coupon page checks are failing"
+          description: "{{ $value }} coupon page fetches failed with HTTP errors in the last crawl (blocked or rate limited?)."
+
+      - alert: ClipDropCrawlStale
+        expr: time() - clipdrop_last_crawl_timestamp_seconds > 30 * 3600
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ClipDrop hasn't crawled in over 30 hours"
+          description: "The daily 06:00 crawl did not finish. Check: kubectl -n clips logs deploy/clipdrop"
+
+      - alert: ClipDropMetricsMissing
+        expr: absent(clipdrop_coupons_live)
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ClipDrop metrics are not being scraped"
+          description: "Service clips/clipdrop-metrics (port 9464) is not answering, so the other ClipDrop alerts are blind."
+
+      - alert: ClipDropSourceFailing
+        expr: clipdrop_source_ok == 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "ClipDrop source {{ $labels.source }} failed in the last crawl"
+          description: "The coupon source {{ $labels.source }} errored; the crawl log has the reason."
+
+      - alert: ClipDropFewCoupons
+        expr: clipdrop_coupons_live{scope="local"} < 5
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: "ClipDrop is showing only {{ $value }} local coupons"
+          description: "Unusually few. Either a quiet week or a source/parsing problem worth a look."

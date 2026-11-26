@@ -387,7 +387,7 @@ data:
     // single-use code). Slow and capped.
     const CHECK_DELAY_MS = +(process.env.CHECK_DELAY_MS || 4000);
     const CHECK_MAX = +(process.env.CHECK_MAX || 150);
-    let checksThisRun = 0;
+    let checksThisRun = 0, noDateThisRun = 0, errorThisRun = 0; // per-run counters, exported as metrics
 
     // Parse the text of an offers.greatclips.com page. Pure, so it can be tested on saved pages.
     // Great Clips changed the date format in autumn 2026, from "Offer expires 10/09/2026" to
@@ -435,7 +435,12 @@ data:
         r = await fetch(url, { headers: { "user-agent": UA }, signal: ctl.signal }).finally(() => clearTimeout(t));
       } catch (e) { return fresh ? prev : null; }
       const res = { v: CHECK_VERSION, at: new Date().toISOString(), http: r.status, expires: null, market: null, descr: null, rolling: false, terms: false };
-      if (r.ok) Object.assign(res, parseOfferPage(await r.text()));
+      if (r.ok) {
+        Object.assign(res, parseOfferPage(await r.text()));
+        // A page that loads but yields no date is how a Great Clips format change shows up
+        // (2026-11-19..25 every page did); ClipDropVerificationBroken alerts on the ratio.
+        if (!res.expires && !res.rolling) noDateThisRun++;
+      } else if (r.status !== 404 && r.status !== 410) errorThisRun++;
       db.checks[id] = res;
       return res;
     }
@@ -480,7 +485,7 @@ data:
           report.sources.greatclips = { ok: true, perks: g.perks.length, pages: g.posts.length };
         } catch (e) { log("greatclips.com failed: " + e.message); report.sources.greatclips = { ok: false, error: e.message }; }
 
-        checksThisRun = 0;
+        checksThisRun = 0; noDateThisRun = 0; errorThisRun = 0;
         const today = now.slice(0, 10);
         let dead = 0, verified = 0;
         for (const post of posts) {
@@ -561,8 +566,8 @@ data:
         // Regular salon prices for "you save $X" (best effort; never fails the crawl).
         try { await prices.enrich(Object.values(db.coupons), { get, sleep, delay: DELAY_MS, dir: store.DATA_DIR, log }); }
         catch (e) { log(`prices failed: ${e.message}`); }
-        report.checks = { fetched: checksThisRun, verified, dead };
-        log(`coupon pages: ${checksThisRun} fetched, ${verified} verified live, ${dead} expired/gone`);
+        report.checks = { fetched: checksThisRun, verified, dead, noDate: noDateThisRun, errors: errorThisRun };
+        log(`coupon pages: ${checksThisRun} fetched, ${verified} verified live, ${dead} expired/gone, ${noDateThisRun} without a readable date, ${errorThisRun} errors`);
         // Forget checks for links we no longer see anywhere.
         for (const id of Object.keys(db.checks || {})) if (Date.now() - Date.parse(db.checks[id].at) > 14 * 86400e3) delete db.checks[id];
         report.found = seen.size;
@@ -1557,6 +1562,43 @@ data:
 
       send(res, 404, { error: "not found" });
     }
+
+    // ---- Prometheus metrics (separate port, NOT exposed through the public ingress) ----
+    // Scraped via Service clipdrop-metrics; alerts in manifests/prometheus/rules.yaml
+    // (group clipdrop, homelab/ops#28).
+    const METRICS_PORT = +(process.env.METRICS_PORT || 9464);
+    function metricsText() {
+      const db = store.db();
+      const last = db.crawls[db.crawls.length - 1] || null;
+      const out = [];
+      const metric = (name, help, rows) => {
+        out.push(`# HELP ${name} ${help}`, `# TYPE ${name} gauge`);
+        for (const [labels, v] of rows) out.push(`${name}${labels} ${v}`);
+      };
+      metric("clipdrop_crawl_running", "1 while a crawl is running.", [["", crawler.running() ? 1 : 0]]);
+      if (last) {
+        const ch = last.checks || {};
+        metric("clipdrop_last_crawl_timestamp_seconds", "When the last finished crawl started (unix seconds).", [["", Math.floor(Date.parse(last.at) / 1000)]]);
+        metric("clipdrop_last_crawl_duration_seconds", "Duration of the last crawl.", [["", Math.round((last.ms || 0) / 1000)]]);
+        metric("clipdrop_last_crawl_coupons_found", "Coupons found by the last crawl.", [["", last.found || 0]]);
+        metric("clipdrop_last_crawl_pages_fetched", "offers.greatclips.com pages fetched (not served from cache) in the last crawl.", [["", ch.fetched || 0]]);
+        metric("clipdrop_last_crawl_pages_verified", "Coupons verified live against their page in the last crawl.", [["", ch.verified || 0]]);
+        metric("clipdrop_last_crawl_pages_dead", "Coupons found expired or gone in the last crawl.", [["", ch.dead || 0]]);
+        metric("clipdrop_last_crawl_pages_no_date", "Fetched pages that loaded but had no readable end date.", [["", ch.noDate || 0]]);
+        metric("clipdrop_last_crawl_pages_errors", "Fetched pages that failed (HTTP error other than 404/410).", [["", ch.errors || 0]]);
+        metric("clipdrop_source_ok", "1 if the source worked in the last crawl.",
+          Object.entries(last.sources || {}).map(([k, v]) => [`{source="${k}"}`, v && v.ok ? 1 : 0]));
+      }
+      const live = Object.values(db.coupons).filter(isLive);
+      metric("clipdrop_coupons_live", "Coupons currently shown on the board.", ["local", "national", "evergreen"].map(sc =>
+        [`{scope="${sc}"}`, live.filter(c => sc === "evergreen" ? c.evergreen : !c.evergreen && c.scope === sc).length]));
+      return out.join("\n") + "\n";
+    }
+    http.createServer((req, res) => {
+      if (req.url !== "/metrics") { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { "Content-Type": "text/plain; version=0.0.4" });
+      res.end(metricsText());
+    }).listen(METRICS_PORT);
 
     // ---- daily schedule --------------------------------------------------------
     function lastCrawlAt() {
