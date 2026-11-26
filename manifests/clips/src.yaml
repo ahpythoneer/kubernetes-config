@@ -23,6 +23,7 @@ data:
     const store = require("./store");
     const geo = require("./geo");
     const llm = require("./llm");
+    const prices = require("./prices");
 
     const UA = process.env.CRAWL_UA || "ClipDropBot/1.0 (+https://clips.racktocloud.com; daily, polite)";
     const MAX_AGE_DAYS = +(process.env.MAX_AGE_DAYS || 45);
@@ -320,6 +321,38 @@ data:
         couponUrl: `https://offers.greatclips.com/${id}`, unverified: true, requireCheck: true }));
     }
 
+    // ---- source: greatclips.com newsroom ----------------------------------------
+    // Great Clips announces its NATIONWIDE campaigns here ("Nationwide $9.99 haircut
+    // coupon ... valid January 16 through January 23, 2026"). These posts have no
+    // coupon link (claimed in the app or by text) and the sitemap carries no dates, so
+    // the publish date is read from the post header, only recent posts are used, and
+    // a post is listed only when its end date can be read (requireDate) and is in the
+    // future. Old campaigns therefore never resurface. homelab/ops#25.
+    const NEWSROOM_DAYS = +(process.env.NEWSROOM_DAYS || 75);
+    async function greatclipsNewsroom(log) {
+      const sm = await get("https://www.greatclips.com/api/vtl/sitemap");
+      const urls = [...sm.matchAll(/<loc>([^<]*\/news-room\/[^<]+)<\/loc>/g)].map(m => m[1].trim())
+        .filter(u => /coupon|offer|\$|haircut|free|discount|deal|price/i.test(u));
+      const posts = [];
+      const cutoff = new Date(Date.now() - NEWSROOM_DAYS * 86400e3).toISOString().slice(0, 10);
+      for (const u of urls) {
+        await sleep(DELAY_MS);
+        let h;
+        try { h = await get(u); } catch (e) { log(`  skip ${u}: ${e.message}`); continue; }
+        const t = text(h);
+        // header date as printed above the headline: "January 05 2026"
+        const dm = t.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s+(20\d{2})\b/);
+        if (!dm) continue;
+        const posted = `${dm[3]}-${String(MONTHS.indexOf(dm[1].toLowerCase()) + 1).padStart(2, "0")}-${dm[2].padStart(2, "0")}`;
+        if (posted < cutoff) continue;
+        const body = t.slice(t.indexOf(dm[0]), t.indexOf(dm[0]) + 3500);
+        posts.push({ source: "greatclips.com newsroom", url: u, title: meta(h, "og:title") || body.slice(0, 120), body,
+          posted, couponUrl: null, official: true, requireDate: true });
+      }
+      log(`greatclips newsroom: ${urls.length} coupon-related posts, ${posts.length} published in the last ${NEWSROOM_DAYS} days`);
+      return posts;
+    }
+
     async function greatclipsPromos(log) {
       const base = "https://www.greatclips.com";
       const h = await get(base + "/promotions/");
@@ -437,6 +470,8 @@ data:
         catch (e) { log("greatclips.coupons failed: " + e.message); report.sources.greatclipsCoupons = { ok: false, error: e.message }; }
         try { const p = await waybackOffers(log); posts.push(...p); report.sources.wayback = { ok: true, links: p.length }; }
         catch (e) { log("wayback failed: " + e.message); report.sources.wayback = { ok: false, error: e.message }; }
+        try { const p = await greatclipsNewsroom(log); posts.push(...p); report.sources.newsroom = { ok: true, posts: p.length }; }
+        catch (e) { log("newsroom failed: " + e.message); report.sources.newsroom = { ok: false, error: e.message }; }
         try {
           const g = await greatclipsPromos(log);
           for (const p of g.perks) upsert({ id: p.key, scope: "national", evergreen: true, source: "greatclips.com", url: p.url,
@@ -490,6 +525,7 @@ data:
           if (post.unverified && /mailing list|email list|sign[- ]?up/i.test(all) && /\$\s?2\b/.test(all)) { log(`  skip sign-up perk dup`); continue; }
           const exp = (post.checked && post.checked.expires) || parseExpiry(post.title + " " + post.body, ref) || (/^\d{4}-\d{2}-\d{2}$/.test(x.expires || "") ? x.expires : null);
           if (exp && exp < today) { dead++; log(`  expired ${exp}: ${post.title.slice(0, 80)}`); continue; }
+          if (post.requireDate && !exp) { log(`  no end date, skipped: ${post.title.slice(0, 80)}`); continue; }
           const h = post.salonHint;
           const salon = h ? { name: h.name, city: h.city, state: (h.state || String(x.salon_state || "")).toUpperCase() }
             : x.salon_city ? { name: x.salon_name || null, city: x.salon_city, state: String(x.salon_state || "").toUpperCase() } : null;
@@ -505,6 +541,7 @@ data:
             terms: x.terms ? String(x.terms).slice(0, 300) : null, expires: exp, posted: post.posted,
             source: post.source, url: post.couponUrl || post.url, thread: post.url, locs,
             unverified: !!post.unverified, checkedAt: post.checked ? post.checked.at : null,
+            street: (post.checked && post.checked.salon && post.checked.salon.street) || null,
             confidence: post.unverified ? 0.5 : report.llm ? 0.9 : 0.6,
           });
           log(`  + ${x.scope} ${offerText(x.offer, post)} ${locs.map(l => (l.city || "*") + "," + l.state + (l.salon ? " [" + l.salon + "]" : "")).join(" ")} exp=${exp}${post.unverified ? " (unverified)" : ""}`);
@@ -521,6 +558,9 @@ data:
         for (const [id, c] of Object.entries(db.coupons))
           if (Date.now() - Date.parse(c.lastSeen) > 90 * 86400e3) { delete db.coupons[id]; delete db.votes[id]; }
 
+        // Regular salon prices for "you save $X" (best effort; never fails the crawl).
+        try { await prices.enrich(Object.values(db.coupons), { get, sleep, delay: DELAY_MS, dir: store.DATA_DIR, log }); }
+        catch (e) { log(`prices failed: ${e.message}`); }
         report.checks = { fetched: checksThisRun, verified, dead };
         log(`coupon pages: ${checksThisRun} fetched, ${verified} verified live, ${dead} expired/gone`);
         // Forget checks for links we no longer see anywhere.
@@ -535,7 +575,7 @@ data:
       return lines;
     }
 
-    module.exports = { run, running, parseExpiry, parseOfferPage, locate, citiesIn };
+    module.exports = { run, running, parseExpiry, parseOfferPage, greatclipsNewsroom, extract, locate, citiesIn };
   geo.js: |
     "use strict";
     // ZIP -> {lat, lon, city, state} from the GeoNames US postal code dump
@@ -656,6 +696,7 @@ data:
     .ticket .top{padding:16px 16px 12px}
     .offer{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin:0 0 6px}
     .title{margin:0 0 8px;color:var(--muted);font-size:14px}
+    .save{margin:-2px 0 8px;color:var(--accent);font-size:14px;font-weight:700}
     .tags{display:flex;gap:6px;flex-wrap:wrap}
     .tag{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
     .tag.hot{border-color:transparent;background:var(--accent);color:#fff}
@@ -824,6 +865,8 @@ data:
       var top=el("div","top");
       top.appendChild(el("p","offer",c.offer||c.title));
       if(c.offer && c.title && c.title!==c.offer) top.appendChild(el("p","title",c.title));
+      if(c.regular){ var sv=el("p","save",(c.regular.basis==="salon"?"Regular $":"Usually $")+c.regular.price.toFixed(2)+" · you save $"+c.regular.save.toFixed(2));
+        sv.title=c.regular.basis==="salon"?"This salon's regular haircut price, from salons.greatclips.com":"Regular haircut price "+c.regular.basis+" (median of nearby salons), from salons.greatclips.com"; top.appendChild(sv); }
       var tags=el("div","tags");
       var dl=daysLeft(c.expires);
       if(dl!=null) tags.appendChild(el("span","tag"+(dl<=3?" soon":""), dl<=0?"ends today":dl===1?"ends tomorrow":"ends in "+dl+" days"));
@@ -1192,6 +1235,117 @@ data:
     function endpoint() { return lastGood; }
 
     module.exports = { json, endpoint, MODEL };
+  prices.js: |
+    "use strict";
+    // Regular (non-coupon) haircut prices from salons.greatclips.com, so a card can say
+    // "Regular $23 · save $12.01" (homelab/ops#25). robots.txt there allows crawling and
+    // points at the sitemaps used here. Cached on the data volume: the salon index for
+    // 7 days, each salon's price for 30 days, and at most MAX new price pages per crawl.
+    //
+    //  - single-salon coupon: the salon page matched by street address (house number)
+    //  - market coupon ("participating Austin area salons"): the median of up to 3
+    //    salons in the coupon's city, shown as the typical price there
+    const fs = require("fs");
+    const path = require("path");
+
+    const BASE = "https://salons.greatclips.com";
+    const INDEX_DAYS = 7, PRICE_DAYS = 30;
+    const norm = s => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    function load(dir) {
+      try { return JSON.parse(fs.readFileSync(path.join(dir, "prices.json"), "utf8")); }
+      catch { return { index: null, indexAt: null, prices: {} }; }
+    }
+    function save(dir, d) {
+      const f = path.join(dir, "prices.json");
+      fs.writeFileSync(f + ".tmp", JSON.stringify(d));
+      fs.renameSync(f + ".tmp", f);
+    }
+
+    // "us/tx/austin/2110-w-slaughter-ln/salon-services" → index["tx/austin"] = { slug: "austin", streets: [...] }
+    async function buildIndex(get, sleep, delay) {
+      const root = await get(`${BASE}/sitemap.xml`);
+      const idx = {};
+      for (const m of root.matchAll(/<loc>([^<]+)<\/loc>/g)) {
+        await sleep(delay);
+        const x = await get(m[1].trim());
+        for (const u of x.matchAll(/<loc>https:\/\/salons\.greatclips\.com\/us\/([a-z]{2})\/([^/<]+)\/([^/<]+)\/salon-services<\/loc>/g)) {
+          const k = `${u[1]}/${norm(decodeURIComponent(u[2]))}`;
+          (idx[k] = idx[k] || { slug: u[2], streets: [] }).streets.push(u[3]);
+        }
+      }
+      return idx;
+    }
+
+    // "Haircuts For Everyone Haircut - $ 23 Child Haircut ..." on the salon-services page
+    function haircutPrice(html) {
+      const t = html.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+      const m = t.match(/Haircuts? For Everyone\s+Haircut\s*-\s*\$\s?(\d{1,3}(?:\.\d{2})?)/i) || t.match(/\bHaircut\s*-\s*\$\s?(\d{1,3}(?:\.\d{2})?)/i);
+      return m ? +m[1] : null;
+    }
+
+    // "$10.99 haircut" → you pay 10.99; "$5 off" → you save 5
+    function savings(offer, regular) {
+      const m = String(offer || "").match(/\$\s?(\d{1,3}(?:\.\d{2})?)\s*(off)?/i);
+      if (!m || !regular) return null;
+      const save = m[2] ? +m[1] : +(regular - +m[1]).toFixed(2);
+      return save > 0 && save < regular ? save : null;
+    }
+
+    async function enrich(coupons, { get, sleep, delay, dir, log, max = 40 }) {
+      const d = load(dir);
+      if (!d.index || Date.now() - Date.parse(d.indexAt) > INDEX_DAYS * 864e5) {
+        try {
+          d.index = await buildIndex(get, sleep, delay);
+          d.indexAt = new Date().toISOString();
+          log(`prices: salon index rebuilt, ${Object.keys(d.index).length} cities`);
+        } catch (e) {
+          log(`prices: index failed: ${e.message}`);
+          if (!d.index) return;
+        }
+      }
+      let fetched = 0;
+      const priceOf = async (st, slug, street) => {
+        const url = `${BASE}/us/${st}/${slug}/${street}/salon-services`;
+        const c = d.prices[url];
+        if (c && Date.now() - Date.parse(c.at) < PRICE_DAYS * 864e5) return c.price;
+        if (fetched >= max) return c ? c.price : null;
+        fetched++;
+        await sleep(delay);
+        try {
+          const p = haircutPrice(await get(url));
+          d.prices[url] = { price: p, at: new Date().toISOString() };
+          return p;
+        } catch { return c ? c.price : null; }
+      };
+      let priced = 0;
+      for (const c of coupons) {
+        delete c.regular;
+        if (c.scope !== "local" || !(c.locs || []).length) continue;
+        const l = c.locs[0];
+        if (!l.city || !l.state) continue;
+        const st = l.state.toLowerCase();
+        const city = d.index[`${st}/${norm(l.city)}`];
+        if (!city) continue;
+        let regular = null, basis = null;
+        const num = String(c.street || "").match(/^\d+/);
+        const street = num && (city.streets.find(s => norm(s) === norm(c.street)) || city.streets.find(s => s.startsWith(num[0] + "-")));
+        if (street) {
+          regular = await priceOf(st, city.slug, street);
+          basis = "salon";
+        } else if (!l.salon) {
+          const ps = [];
+          for (const s of city.streets.slice(0, 3)) { const p = await priceOf(st, city.slug, s); if (p) ps.push(p); }
+          if (ps.length) { ps.sort((a, b) => a - b); regular = ps[Math.floor(ps.length / 2)]; basis = `typical in ${l.city}`; }
+        }
+        const save = savings(c.offer, regular);
+        if (regular && save) { c.regular = { price: regular, basis, save }; priced++; }
+      }
+      save(dir, d);
+      log(`prices: ${priced} coupons with a regular price (${fetched} salon pages fetched)`);
+    }
+
+    module.exports = { enrich, haircutPrice, savings };
   server.js: |
     "use strict";
     // ClipDrop — daily-crawled Great Clips coupon board. Dependency-free Node.
@@ -1253,6 +1407,7 @@ data:
         markets: (c.locs || []).map(l => l.salon ? `${l.salon}, ${l.city}, ${l.state}` : l.city ? `${l.city} area, ${l.state}` : `select ${l.state} salons`),
         miles: near ? near.miles : null, place: near ? near.place : null,
         posted: c.posted, firstSeen: c.firstSeen, votes: v, unverified: !!c.unverified, checkedAt: c.checkedAt || null,
+        regular: c.regular || null,
       };
     }
 
