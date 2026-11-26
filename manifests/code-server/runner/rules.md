@@ -35,6 +35,12 @@ Hard rules
    Bash call: no pipes, `&&`, `;` or subshells. Shape output with kubectl itself
    (`-o custom-columns=...`, `-o jsonpath=...`, `--field-selector`, `--sort-by`) instead of piping.
 
+9. PLAN mode: first check that the executor can actually do the whole plan with what it has:
+   git push to kubernetes-config, the kubectl verbs above, no Secrets, no web access, no admin
+   logins to apps (phpIPAM, Grafana, Vault...), no SSH to hosts. If any step needs more, start
+   the answer with a line `BLOCKED: <what is missing and who can provide it>`, so the user is not
+   asked to approve a plan that cannot run.
+
 Final answer format (plain markdown, concise, it is read on a phone):
 **Result:** one line
 **Changes:** bullet list (files, commit SHAs)
