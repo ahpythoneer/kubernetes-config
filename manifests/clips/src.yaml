@@ -4,12 +4,18 @@ apiVersion: v1
 data:
   crawler.js: |
     "use strict";
-    // Daily crawl. Sources (all robots.txt-allowed, fetched politely, once a day):
+    // Daily crawl. Discovery sources (robots.txt-allowed, fetched politely, once a day):
     //  1. Slickdeals thread sitemaps (/attachment/sitemaps/threads-*.xml.gz) → threads
     //     whose slug mentions Great Clips → the thread page (/f/<id>) for title, body,
-    //     post date and the offers.greatclips.com coupon link. We only LINK to
-    //     offers.greatclips.com (its robots.txt disallows crawling), never fetch it.
-    //  2. greatclips.com/promotions/ (+ its sub-pages) for nationwide perks/campaigns.
+    //     post date and the offers.greatclips.com coupon link.
+    //  2. greatclips.coupons price pages: offers.greatclips.com links per salon/market.
+    //  3. Wayback Machine CDX index: offers.greatclips.com IDs captured in the last
+    //     WAYBACK_DAYS days (discovery only: listed only if the coupon page verifies).
+    //  4. greatclips.com/promotions/ (+ its sub-pages) for nationwide perks/campaigns.
+    // Verification: every offers.greatclips.com link is checked against its own page
+    // (read-only, never redeemed, capped and spaced; the user chose this on 2026-09-26
+    // although that host's robots.txt disallows crawling). The page's terms are
+    // authoritative for the end date and for where the coupon is valid.
     // The LLM turns each post into structured fields; regex stays the source of
     // truth for dates and prices when it can find them.
     const zlib = require("zlib");
@@ -288,6 +294,32 @@ data:
       return posts;
     }
 
+    // ---- source: Wayback Machine (discovery only) -------------------------------
+    // Coupon links get archived wherever people share them, so the Wayback Machine's
+    // public CDX index is a wide net for offers.greatclips.com IDs (1,346 distinct IDs,
+    // 870 captured in 2026, when it was evaluated for homelab/ops#25). Many Great Clips coupons are
+    // short campaigns (e.g. 48 market coupons captured 2026-10-21 all ended 10-23),
+    // so only recent captures are taken, and a link is listed ONLY if its own coupon
+    // page verifies (requireCheck). Nothing unverified from here ever reaches the board.
+    const WAYBACK_DAYS = +(process.env.WAYBACK_DAYS || 14);
+    const WAYBACK_MAX = +(process.env.WAYBACK_MAX || 60);
+    async function waybackOffers(log) {
+      const from = new Date(Date.now() - WAYBACK_DAYS * 86400e3).toISOString().slice(0, 10).replace(/-/g, "");
+      const raw = await get(`https://web.archive.org/cdx/search/cdx?url=offers.greatclips.com/*&output=json&fl=original,timestamp&collapse=urlkey&from=${from}&limit=3000`);
+      const rows = (raw.trim() ? JSON.parse(raw) : []).slice(1);
+      const ids = new Map();
+      for (const [orig, ts] of rows) {
+        const m = String(orig).match(/offers\.greatclips\.com\/([A-Za-z0-9]{5,12})\b/);
+        if (m && (!ids.has(m[1]) || ts > ids.get(m[1]))) ids.set(m[1], ts);
+      }
+      const newest = [...ids.entries()].sort((a, b) => b[1].localeCompare(a[1])).slice(0, WAYBACK_MAX);
+      log(`wayback: ${ids.size} offer links captured in the last ${WAYBACK_DAYS} days, considering ${newest.length}`);
+      return newest.map(([id, ts]) => ({
+        source: "Wayback Machine", url: `https://web.archive.org/web/${ts}/https://offers.greatclips.com/${id}`,
+        title: "", body: "", posted: `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`,
+        couponUrl: `https://offers.greatclips.com/${id}`, unverified: true, requireCheck: true }));
+    }
+
     async function greatclipsPromos(log) {
       const base = "https://www.greatclips.com";
       const h = await get(base + "/promotions/");
@@ -324,35 +356,53 @@ data:
     const CHECK_MAX = +(process.env.CHECK_MAX || 150);
     let checksThisRun = 0;
 
+    // Parse the text of an offers.greatclips.com page. Pure, so it can be tested on saved pages.
+    // Great Clips changed the date format in autumn 2026, from "Offer expires 10/09/2026" to
+    // "Offer expires May 23, 2025", and the old parser silently found no date at all (homelab/ops#26).
+    // Both formats are accepted.
+    const CHECK_VERSION = 2; // bump when parsing changes so cached results from older parsers are re-fetched
+    function parseOfferPage(html) {
+      const t = text(html);
+      const res = { expires: null, market: null, salon: null, descr: null, rolling: false, terms: false };
+      const termsM = t.match(/Terms and Conditions\s+(.{0,600}?)All Great Clips/i);
+      res.terms = !!termsM;
+      const terms = termsM ? termsM[1] : t;
+      let em = terms.match(/(?:Offer\s+)?expires?:?\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+      if (em) res.expires = `${em[3]}-${em[1].padStart(2, "0")}-${em[2].padStart(2, "0")}`;
+      else {
+        em = terms.match(/(?:Offer\s+)?expires?:?\s+([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})/i);
+        const mo = em ? MONTHS.indexOf(em[1].slice(0, 3).toLowerCase()) + 1 : 0;
+        if (mo) res.expires = `${em[3]}-${String(mo).padStart(2, "0")}-${em[2].padStart(2, "0")}`;
+      }
+      res.rolling = /within \d+ days of (initial )?code generation/i.test(t);
+      // lazy ".": market names can contain periods ("St. Joseph area", "St. Louis area")
+      const mm = terms.match(/Valid (?:only )?at participating (.{3,120}?) Great Clips salons?/i);
+      if (mm) res.market = mm[1].trim();
+      // "Valid at Great Clips Sherwood Plaza at 3384 Robinhood Rd in Winston-Salem, NC."
+      const sm = terms.match(/Valid (?:only )?at Great Clips (.{2,60}?) at (\d[^.]{2,80}?) in ([A-Z][A-Za-z .'-]{1,40}?),\s*([A-Z]{2})\b/);
+      if (sm) res.salon = { name: sm[1].trim(), street: sm[2].trim(), city: sm[3].trim(), state: sm[4] };
+      const dm = t.match(/Description\s+(.{10,300}?)(?:\s+To redeem|\s+Terms and Conditions)/i);
+      if (dm) res.descr = dm[1].trim();
+      return res;
+    }
+
     async function checkOffer(url, db) {
       const id = url.split("/").pop();
       db.checks = db.checks || {};
       const prev = db.checks[id];
-      if (prev && Date.now() - Date.parse(prev.at) < 20 * 3600e3) return prev;
-      if (checksThisRun >= CHECK_MAX) return prev || null;
+      const fresh = prev && prev.v === CHECK_VERSION;
+      if (fresh && prev.expires && prev.expires < new Date().toISOString().slice(0, 10)) return prev; // ended for good
+      if (fresh && Date.now() - Date.parse(prev.at) < 20 * 3600e3) return prev;
+      if (checksThisRun >= CHECK_MAX) return fresh ? prev : null;
       checksThisRun++;
       await sleep(CHECK_DELAY_MS);
       let r;
       try {
         const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 30000);
         r = await fetch(url, { headers: { "user-agent": UA }, signal: ctl.signal }).finally(() => clearTimeout(t));
-      } catch (e) { return prev || null; }
-      const res = { at: new Date().toISOString(), http: r.status, expires: null, market: null, descr: null, rolling: false };
-      if (r.ok) {
-        const t = text(await r.text());
-        // Market coupons say "Offer expires 10/09/2026", single-salon ones "Expires 08/19/2025".
-        const terms = (t.match(/Terms and Conditions\s+(.{0,600}?)All Great Clips/i) || [])[1] || t;
-        const em = terms.match(/(?:Offer\s+)?expires?:?\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
-        if (em) res.expires = `${em[3]}-${em[1].padStart(2, "0")}-${em[2].padStart(2, "0")}`;
-        res.rolling = /within \d+ days of (initial )?code generation/i.test(t);
-        const mm = terms.match(/Valid (?:only )?at participating ([^.]{3,120}?) Great Clips salons?/i);
-        if (mm) res.market = mm[1].trim();
-        // "Valid at Great Clips Sherwood Plaza at 3384 Robinhood Rd in Winston-Salem, NC."
-        const sm = terms.match(/Valid (?:only )?at Great Clips (.{2,60}?) at (\d[^.]{2,80}?) in ([A-Z][A-Za-z .'-]{1,40}?),\s*([A-Z]{2})\b/);
-        if (sm) res.salon = { name: sm[1].trim(), street: sm[2].trim(), city: sm[3].trim(), state: sm[4] };
-        const dm = t.match(/Description\s+(.{10,300}?)(?:\s+To redeem|\s+Terms and Conditions)/i);
-        if (dm) res.descr = dm[1].trim();
-      }
+      } catch (e) { return fresh ? prev : null; }
+      const res = { v: CHECK_VERSION, at: new Date().toISOString(), http: r.status, expires: null, market: null, descr: null, rolling: false, terms: false };
+      if (r.ok) Object.assign(res, parseOfferPage(await r.text()));
       db.checks[id] = res;
       return res;
     }
@@ -385,6 +435,8 @@ data:
         catch (e) { log("slickdeals failed: " + e.message); report.sources.slickdeals = { ok: false, error: e.message }; }
         try { const p = await greatclipsCoupons(log); posts.push(...p); report.sources.greatclipsCoupons = { ok: true, links: p.length }; }
         catch (e) { log("greatclips.coupons failed: " + e.message); report.sources.greatclipsCoupons = { ok: false, error: e.message }; }
+        try { const p = await waybackOffers(log); posts.push(...p); report.sources.wayback = { ok: true, links: p.length }; }
+        catch (e) { log("wayback failed: " + e.message); report.sources.wayback = { ok: false, error: e.message }; }
         try {
           const g = await greatclipsPromos(log);
           for (const p of g.perks) upsert({ id: p.key, scope: "national", evergreen: true, source: "greatclips.com", url: p.url,
@@ -403,7 +455,9 @@ data:
             const chk = await checkOffer(post.couponUrl, db);
             if (chk) {
               if (chk.http === 404 || chk.http === 410 || (chk.expires && chk.expires < today)) { dead++; continue; }
-              if (chk.http === 200 && (chk.expires || chk.rolling)) {
+              // A page with real terms is authoritative for WHERE the coupon is valid even when it
+              // states no end date; it used to be ignored unless a date was found (homelab/ops#26).
+              if (chk.http === 200 && (chk.expires || chk.rolling || chk.market || chk.salon)) {
                 verified++;
                 post.unverified = false;
                 post.checked = chk;
@@ -416,10 +470,12 @@ data:
                   post.body = `${chk.descr || ""}${ex} ${post.body}`;
                 } else {
                   post.body = `${chk.descr || ""} Valid only at participating ${chk.market || ""} Great Clips salons.${ex} ${post.body}`;
+                  if (!post.title && chk.market) post.title = `Participating ${chk.market} Great Clips salons`;
                 }
               }
             }
           }
+          if (post.requireCheck && post.unverified) continue; // discovery-only source and the page did not verify
           let x = await extract(post);
           if (x) report.llm = llm.endpoint();
           else x = post.official ? null : heuristic(post);
@@ -433,6 +489,7 @@ data:
           if (post.unverified && x.scope === "national" && !NATIONAL.test(all)) x.scope = "local";
           if (post.unverified && /mailing list|email list|sign[- ]?up/i.test(all) && /\$\s?2\b/.test(all)) { log(`  skip sign-up perk dup`); continue; }
           const exp = (post.checked && post.checked.expires) || parseExpiry(post.title + " " + post.body, ref) || (/^\d{4}-\d{2}-\d{2}$/.test(x.expires || "") ? x.expires : null);
+          if (exp && exp < today) { dead++; log(`  expired ${exp}: ${post.title.slice(0, 80)}`); continue; }
           const h = post.salonHint;
           const salon = h ? { name: h.name, city: h.city, state: (h.state || String(x.salon_state || "")).toUpperCase() }
             : x.salon_city ? { name: x.salon_name || null, city: x.salon_city, state: String(x.salon_state || "").toUpperCase() } : null;
@@ -478,7 +535,7 @@ data:
       return lines;
     }
 
-    module.exports = { run, running, parseExpiry, locate, citiesIn };
+    module.exports = { run, running, parseExpiry, parseOfferPage, locate, citiesIn };
   geo.js: |
     "use strict";
     // ZIP -> {lat, lon, city, state} from the GeoNames US postal code dump
@@ -1395,6 +1452,5 @@ data:
     module.exports = { db: () => db, save, DATA_DIR };
 kind: ConfigMap
 metadata:
-  creationTimestamp: null
   name: clipdrop-src
   namespace: clips
